@@ -1,0 +1,1248 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>动态规划，从一段楼梯开始</title>
+<meta name="description" content="一个循循善诱的互动教程：不背公式，亲手发现动态规划为什么存在、怎么用。">
+<style>
+/* FunAl - DP tutorial base styles. Warm, calm, one column, big type. */
+:root {
+  --bg: #faf7f1;
+  --paper: #ffffff;
+  --ink: #1f2328;
+  --muted: #6b6f76;
+  --line: #e6e1d6;
+  --accent: #2456c9;
+  --accent-soft: #e8effc;
+  --learner: #e8f1fb;
+  --ok: #15803d;
+  --ok-soft: #e6f4ea;
+  --warn: #9a5b00;
+  --warn-soft: #fff4e0;
+  --hint-soft: #fbf3d9;
+  --shadow: 0 6px 24px rgba(30, 30, 40, .07);
+  --radius: 14px;
+  --font: -apple-system, BlinkMacSystemFont, "PingFang SC", "Hiragino Sans GB", "Microsoft YaHei", "Noto Sans CJK SC", "Segoe UI", sans-serif;
+  --mono: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+}
+@media (prefers-color-scheme: dark) {
+  :root {
+    --bg: #15171b; --paper: #1e2126; --ink: #e9e9ec; --muted: #9aa0a8; --line: #2c3037;
+    --accent: #7aa2ff; --accent-soft: #1c2a4a; --learner: #1c2a4a;
+    --ok: #5fc27a; --ok-soft: #173322; --warn: #f0b35a; --warn-soft: #3a2a10; --hint-soft: #3a3313;
+    --shadow: 0 6px 24px rgba(0,0,0,.35);
+  }
+}
+* { box-sizing: border-box; }
+[hidden] { display: none !important; }
+html { font-size: 18px; }
+body {
+  margin: 0; background: var(--bg); color: var(--ink); font-family: var(--font);
+  line-height: 1.75; -webkit-font-smoothing: antialiased;
+}
+button { font: inherit; cursor: pointer; }
+button:disabled { cursor: default; }
+code { font-family: var(--mono); font-size: .92em; background: var(--accent-soft); padding: .05em .4em; border-radius: 6px; }
+strong { font-weight: 700; }
+
+/* ---------- layout ---------- */
+.app { min-height: 100vh; display: flex; flex-direction: column; }
+.topbar {
+  position: sticky; top: 0; z-index: 20; display: flex; align-items: center; gap: 12px;
+  padding: 10px 16px; background: color-mix(in srgb, var(--bg) 88%, transparent);
+  backdrop-filter: blur(8px); border-bottom: 1px solid var(--line);
+}
+.topbar-title { flex: 1; font-weight: 600; font-size: .95rem; color: var(--muted); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.topbar-progress { display: flex; gap: 5px; align-items: center; }
+.topbar-progress .dot { width: 9px; height: 9px; border-radius: 50%; border: 2px solid var(--line); background: transparent; }
+.topbar-progress .dot.done { background: var(--ok); border-color: var(--ok); }
+.topbar-progress .dot.now { border-color: var(--accent); box-shadow: 0 0 0 3px var(--accent-soft); }
+.topbar-btn { border: 1px solid var(--line); background: var(--paper); border-radius: 999px; padding: 4px 12px; font-size: .9rem; color: var(--ink); }
+
+.toc {
+  position: fixed; top: 52px; left: 12px; z-index: 30; width: min(360px, calc(100vw - 24px));
+  background: var(--paper); border: 1px solid var(--line); border-radius: var(--radius); box-shadow: var(--shadow);
+  padding: 8px; max-height: 70vh; overflow: auto;
+}
+.toc button {
+  display: flex; width: 100%; text-align: left; gap: 10px; align-items: baseline;
+  border: 0; background: transparent; color: var(--ink); padding: 8px 10px; border-radius: 10px; font-size: .95rem;
+}
+.toc button:hover { background: var(--accent-soft); }
+.toc button .n { color: var(--muted); font-variant-numeric: tabular-nums; min-width: 1.6em; }
+.toc button.done .n::after { content: " ✓"; color: var(--ok); }
+.toc button.now { background: var(--accent-soft); font-weight: 600; }
+.toc .toc-actions { border-top: 1px solid var(--line); margin-top: 6px; padding-top: 6px; }
+.toc .toc-actions button { color: var(--muted); font-size: .85rem; }
+
+.feed {
+  flex: 1; width: min(760px, 100%); margin: 0 auto; padding: 22px 16px 140px;
+  display: flex; flex-direction: column; gap: 14px;
+}
+.dock {
+  position: fixed; bottom: 0; left: 0; right: 0; z-index: 20;
+  display: flex; justify-content: center; gap: 10px; padding: 12px 16px calc(12px + env(safe-area-inset-bottom));
+  background: linear-gradient(to top, var(--bg) 70%, transparent);
+  pointer-events: none;
+}
+.dock-btn { pointer-events: auto; border-radius: 999px; padding: 12px 22px; font-size: 1rem; border: 1px solid var(--line); background: var(--paper); color: var(--ink); box-shadow: var(--shadow); }
+.dock-btn.primary { background: var(--accent); border-color: var(--accent); color: #fff; font-weight: 600; }
+.dock-btn.ghost { color: var(--accent); }
+.dock-btn:disabled { opacity: .5; box-shadow: none; }
+
+/* ---------- feed blocks ---------- */
+.reveal { animation: rise .38s ease-out both; }
+@keyframes rise { from { opacity: 0; transform: translateY(8px); } to { opacity: 1; transform: none; } }
+
+.bubble { max-width: 100%; padding: 14px 18px; border-radius: var(--radius); }
+.bubble.tutor { background: var(--paper); border: 1px solid var(--line); box-shadow: var(--shadow); align-self: flex-start; }
+.bubble.learner { background: var(--learner); align-self: flex-end; max-width: 80%; border-bottom-right-radius: 4px; }
+.bubble.right { border-left: 5px solid var(--ok); background: var(--ok-soft); }
+.bubble.wrong { border-left: 5px solid var(--warn); background: var(--warn-soft); }
+.bubble.hint { border: 1px dashed var(--warn); background: var(--hint-soft); }
+.bubble.hint .hint-tag { display: inline-block; font-size: .8rem; color: var(--warn); font-weight: 700; margin-right: 8px; }
+.bubble.error { border-left: 5px solid #c0392b; }
+.bubble p { margin: 0; }
+.bubble p + p { margin-top: .6em; }
+
+.note { background: var(--accent-soft); border-radius: var(--radius); padding: 14px 18px; border-left: 5px solid var(--accent); }
+.note .note-title { font-weight: 700; margin-bottom: 4px; }
+
+.canvas { background: var(--paper); border: 1px solid var(--line); border-radius: var(--radius); padding: 16px; box-shadow: var(--shadow); overflow-x: auto; }
+.block { }
+
+.choices { display: flex; flex-direction: column; gap: 10px; align-self: stretch; }
+.choices button {
+  text-align: left; padding: 12px 16px; border-radius: 12px; border: 1.5px solid var(--line); background: var(--paper); color: var(--ink); font-size: 1rem; line-height: 1.5;
+  transition: border-color .15s, background .15s;
+}
+.choices button p { margin: 0; }
+.choices button p + p { margin-top: .4em; }
+.choices button:hover:not(:disabled) { border-color: var(--accent); background: var(--accent-soft); }
+.choices button.wrong { border-color: var(--warn); background: var(--warn-soft); color: var(--muted); text-decoration: line-through; }
+.choices button.right { border-color: var(--ok); background: var(--ok-soft); font-weight: 600; }
+.choices button.picked { border-color: var(--accent); background: var(--accent-soft); font-weight: 600; }
+.choices button:disabled:not(.wrong):not(.right):not(.picked) { opacity: .55; }
+
+.numask { display: flex; gap: 10px; align-items: center; flex-wrap: wrap; }
+.numask input {
+  font: inherit; font-size: 1.15rem; width: 8em; padding: 10px 14px; border-radius: 12px; border: 1.5px solid var(--line); background: var(--paper); color: var(--ink);
+}
+.numask input:focus { outline: 2px solid var(--accent); border-color: var(--accent); }
+.numask .unit { color: var(--muted); }
+.btn { border-radius: 999px; padding: 10px 20px; border: 1px solid var(--line); background: var(--paper); color: var(--ink); font-size: 1rem; }
+.btn.primary { background: var(--accent); color: #fff; border-color: var(--accent); font-weight: 600; }
+.btn.ok { background: var(--ok); color: #fff; border-color: var(--ok); }
+.btn:disabled { opacity: .5; }
+.btn-row { display: flex; gap: 10px; flex-wrap: wrap; }
+
+.muted { color: var(--muted); }
+.small { font-size: .9rem; }
+.center { text-align: center; }
+.title-card { padding: 6px 0 2px; }
+.title-card h1 { margin: 0 0 6px; font-size: 1.55rem; line-height: 1.3; }
+.title-card .sub { color: var(--muted); margin: 0; }
+
+/* ---------- mentor sheet ---------- */
+.mentor {
+  position: fixed; right: 16px; bottom: 84px; z-index: 40; width: min(420px, calc(100vw - 32px)); height: min(560px, calc(100vh - 120px));
+  background: var(--paper); border: 1px solid var(--line); border-radius: var(--radius); box-shadow: 0 12px 40px rgba(0,0,0,.18);
+  display: flex; flex-direction: column;
+}
+.mentor-head { display: flex; align-items: center; gap: 8px; padding: 12px 14px; border-bottom: 1px solid var(--line); flex-wrap: wrap; }
+.mentor-sub { color: var(--muted); font-size: .8rem; flex-basis: 100%; }
+.mentor-close { margin-left: auto; border: 0; background: transparent; font-size: 1.4rem; line-height: 1; color: var(--muted); }
+.mentor-log { flex: 1; overflow: auto; padding: 12px 14px; display: flex; flex-direction: column; gap: 10px; }
+.mentor-log .m { padding: 10px 12px; border-radius: 12px; font-size: .95rem; }
+.mentor-log .m.me { background: var(--learner); align-self: flex-end; max-width: 85%; }
+.mentor-log .m.ai { background: var(--bg); border: 1px solid var(--line); align-self: flex-start; max-width: 95%; }
+.mentor-log .m.sys { color: var(--muted); font-size: .85rem; align-self: center; text-align: center; }
+.mentor-form { display: flex; gap: 8px; padding: 10px; border-top: 1px solid var(--line); }
+.mentor-form input { flex: 1; font: inherit; font-size: .95rem; padding: 10px 12px; border-radius: 999px; border: 1.5px solid var(--line); background: var(--paper); color: var(--ink); }
+.mentor-form input:focus { outline: 2px solid var(--accent); }
+
+@media (max-width: 600px) {
+  html { font-size: 17px; }
+  .bubble.learner { max-width: 92%; }
+  .mentor { right: 8px; left: 8px; width: auto; bottom: 76px; height: min(70vh, 520px); }
+  .dock-btn { padding: 11px 16px; font-size: .95rem; }
+}
+@media print { .dock, .topbar, .mentor { display: none !important; } }
+
+</style>
+</head>
+<body>
+<div id="app" class="app">
+  <header class="topbar">
+    <button class="topbar-btn" id="tocBtn" aria-haspopup="true" aria-expanded="false" title="目录">目录</button>
+    <div class="topbar-title" id="topbarTitle"></div>
+    <div class="topbar-progress" id="topbarProgress" aria-label="进度"></div>
+  </header>
+  <nav class="toc" id="toc" hidden></nav>
+  <main class="feed" id="feed" aria-live="polite"></main>
+  <footer class="dock" id="dock">
+    <button class="dock-btn ghost" id="hintBtn" hidden>需要提示</button>
+    <button class="dock-btn ghost" id="mentorBtn" hidden>问导师</button>
+    <button class="dock-btn primary" id="nextBtn" hidden>下一步</button>
+  </footer>
+</div>
+
+<aside class="mentor" id="mentor" hidden aria-label="AI 导师">
+  <div class="mentor-head">
+    <strong>导师</strong>
+    <span class="mentor-sub" id="mentorSub">它知道你现在在哪一屏、刚才答了什么。它不会直接给答案。</span>
+    <button class="mentor-close" id="mentorClose" aria-label="关闭">×</button>
+  </div>
+  <div class="mentor-log" id="mentorLog"></div>
+  <form class="mentor-form" id="mentorForm">
+    <input id="mentorInput" type="text" autocomplete="off" placeholder="用自己的话说说卡在哪里……" maxlength="500">
+    <button type="submit" class="dock-btn primary" id="mentorSend">发送</button>
+  </form>
+</aside>
+<script>
+// ---- src/engine.js ----
+/* FunAl engine: a conversational, step-by-step tutoring runtime.
+ *
+ * Each screen is registered with FunAl.register({ id, title, goal, minutes, run(t) }).
+ * `run` is an async function that talks to the learner through `t`:
+ *
+ *   await t.say('文字')                         tutor bubble (supports **bold**, `code`, line breaks)
+ *   await t.ask.choice('问题', ['甲','乙'], {correct: 1, feedback: {0: '为什么甲不对'}, hints: [...]})
+ *   await t.ask.predict('先猜猜', ['甲','乙'])   any answer accepted; returns index (use before a reveal)
+ *   await t.ask.number('几种？', {answer: 5, feedback: v => v === 4 ? '差一点……' : null, hints: [...]})
+ *   await t.ask.confirm('我数完了')              a single button
+ *   const box = t.canvas()                       a card for custom widgets (DOM you build yourself)
+ *   await t.waitFor(resolve => ...)              wait until your widget calls resolve(value)
+ *   t.hints([...]) / t.clearHints()              hint ladder for a custom widget
+ *   t.note('小结', '正文')                       highlighted callout
+ *   t.learnerSays('文字')                        echo the learner's action as a right-side bubble
+ *   t.record({kind, prompt, answer, correct})    log an answer for the recap and the AI mentor
+ *   t.done()                                     screen complete; shows the "下一屏" button
+ *
+ * Everything the learner does is recorded in FunAl.state.log so the final screen can "look back".
+ */
+(function () {
+  'use strict';
+
+  const STORAGE_KEY = 'funal.dp.v1';
+  const $ = (id) => document.getElementById(id);
+  const screens = [];
+  const state = { index: 0, completed: new Set(), log: [], attempts: [] };
+  let current = null; // { screen, cancelled, prompt, hints, hintsShown }
+
+  // ---------- utilities ----------
+  const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
+  function esc(s) { return String(s).replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;'); }
+  function md(text) {
+    return esc(text)
+      .replace(/\*\*(.+?)\*\*/g, '<strong>$1</strong>')
+      .replace(/`([^`]+?)`/g, '<code>$1</code>')
+      .split(/\n\s*\n/).map((p) => '<p>' + p.replace(/\n/g, '<br>') + '</p>').join('');
+  }
+  function el(tag, cls, html) {
+    const e = document.createElement(tag);
+    if (cls) e.className = cls;
+    if (html != null) e.innerHTML = html;
+    return e;
+  }
+  function scrollTo(node) {
+    requestAnimationFrame(() => node.scrollIntoView({ behavior: 'smooth', block: 'end' }));
+  }
+  function addStyle(css) {
+    const st = document.createElement('style');
+    st.textContent = css;
+    document.head.appendChild(st);
+  }
+  function load() {
+    try {
+      const s = JSON.parse(localStorage.getItem(STORAGE_KEY) || 'null');
+      if (s) {
+        state.completed = new Set(s.completed || []);
+        state.index = Math.min(s.index || 0, Math.max(0, screens.length - 1));
+        state.log = Array.isArray(s.log) ? s.log : [];
+      }
+    } catch (e) { /* storage unavailable: run without memory */ }
+  }
+  function save() {
+    try {
+      localStorage.setItem(STORAGE_KEY, JSON.stringify({
+        completed: [...state.completed], index: state.index, log: state.log.slice(-400),
+      }));
+    } catch (e) { /* ignore */ }
+  }
+  function reset() {
+    state.completed = new Set(); state.index = 0; state.log = []; state.attempts = [];
+    save();
+    showScreen(0);
+  }
+
+  // ---------- registry ----------
+  function register(screen) {
+    if (!screen || !screen.id || typeof screen.run !== 'function') throw new Error('bad screen');
+    screens.push(screen);
+  }
+
+  // ---------- chrome: topbar, toc, dock ----------
+  function renderChrome() {
+    const i = state.index;
+    const s = screens[i];
+    $('topbarTitle').textContent = s ? `${i + 1} / ${screens.length} · ${s.title}` : '';
+    const prog = $('topbarProgress');
+    prog.innerHTML = '';
+    screens.forEach((sc, k) => {
+      const d = el('span', 'dot' + (state.completed.has(sc.id) ? ' done' : '') + (k === i ? ' now' : ''));
+      d.title = sc.title;
+      prog.appendChild(d);
+    });
+    const toc = $('toc');
+    toc.innerHTML = '';
+    screens.forEach((sc, k) => {
+      const b = el('button', (state.completed.has(sc.id) ? 'done' : '') + (k === i ? ' now' : ''));
+      b.innerHTML = `<span class="n">${k + 1}</span><span>${esc(sc.title)}</span>`;
+      b.addEventListener('click', () => { toggleToc(false); showScreen(k); });
+      toc.appendChild(b);
+    });
+    const actions = el('div', 'toc-actions');
+    const rb = el('button', '', '从头开始（清除进度）');
+    rb.addEventListener('click', () => { if (confirm('清除已保存的进度，从第一屏重新开始？')) { toggleToc(false); reset(); } });
+    actions.appendChild(rb);
+    toc.appendChild(actions);
+  }
+  function toggleToc(force) {
+    const toc = $('toc');
+    const open = force != null ? force : toc.hidden;
+    toc.hidden = !open;
+    $('tocBtn').setAttribute('aria-expanded', String(open));
+  }
+  function setDock({ hint, next }) {
+    const hb = $('hintBtn');
+    const nb = $('nextBtn');
+    hb.hidden = !hint;
+    nb.hidden = !next;
+    if (next) nb.textContent = next;
+  }
+  function updateHintButton() {
+    const hb = $('hintBtn');
+    if (!current || !current.hints || !current.hints.length) { hb.hidden = true; return; }
+    hb.hidden = false;
+    const left = current.hints.length - current.hintsShown;
+    hb.disabled = left <= 0;
+    hb.textContent = left > 0 ? (current.hintsShown === 0 ? '需要提示' : `再提示一点（还剩 ${left}）`) : '提示已用完';
+  }
+  function showHint() {
+    if (!current || !current.hints) return;
+    const k = current.hintsShown;
+    if (k >= current.hints.length) return;
+    current.hintsShown++;
+    const b = el('div', 'bubble hint reveal', `<span class="hint-tag">提示 ${k + 1}</span>` + md(current.hints[k]));
+    $('feed').appendChild(b);
+    scrollTo(b);
+    state.attempts.push({ screen: current.screen.id, kind: 'hint', n: k + 1, text: current.hints[k] });
+    updateHintButton();
+  }
+
+  // ---------- tutor API ----------
+  function makeTutor(run) {
+    const feed = $('feed');
+    const halted = () => new Promise(() => {}); // never resolves: stops a cancelled script
+    const guard = () => (run.cancelled ? halted() : null);
+
+    function append(node) { feed.appendChild(node); scrollTo(node); return node; }
+    function setPrompt(prompt, hints) {
+      run.prompt = prompt || run.prompt;
+      run.hints = hints || [];
+      run.hintsShown = 0;
+      updateHintButton();
+    }
+    function clearPrompt() { run.hints = []; run.hintsShown = 0; updateHintButton(); }
+    function record(entry) {
+      const e = Object.assign({ screen: run.screen.id, t: Date.now() }, entry);
+      state.log.push(e);
+      state.attempts.push(e);
+      save();
+    }
+
+    const t = {
+      screen: run.screen,
+      state,
+      el, md, esc, addStyle, sleep,
+      async say(text, opts = {}) {
+        const g = guard(); if (g) return g;
+        const b = append(el('div', 'bubble tutor reveal' + (opts.cls ? ' ' + opts.cls : ''), md(text)));
+        await sleep(opts.pause == null ? 320 : opts.pause);
+        if (run.cancelled) return halted();
+        return b;
+      },
+      learnerSays(text) {
+        if (run.cancelled) return null;
+        return append(el('div', 'bubble learner reveal', md(text)));
+      },
+      right(text) { if (run.cancelled) return null; return append(el('div', 'bubble tutor right reveal', md(text))); },
+      wrong(text) { if (run.cancelled) return null; return append(el('div', 'bubble tutor wrong reveal', md(text))); },
+      note(title, text) {
+        if (run.cancelled) return null;
+        return append(el('div', 'note reveal', (title ? `<div class="note-title">${esc(title)}</div>` : '') + md(text)));
+      },
+      html(html, cls) { if (run.cancelled) return null; return append(el('div', 'block reveal' + (cls ? ' ' + cls : ''), html)); },
+      canvas(cls) { if (run.cancelled) return null; return append(el('div', 'canvas reveal' + (cls ? ' ' + cls : ''))); },
+      hints(list) { setPrompt(null, list || []); },
+      clearHints() { clearPrompt(); },
+      record,
+      pause(ms) { return run.cancelled ? halted() : sleep(ms); },
+      waitFor(setup) {
+        const g = guard(); if (g) return g;
+        return new Promise((resolve) => setup((v) => { if (!run.cancelled) resolve(v); }));
+      },
+      ask: {
+        /* Multiple choice with a correct answer. Resolves with the correct index once chosen. */
+        async choice(prompt, options, opts = {}) {
+          const g = guard(); if (g) return g;
+          if (prompt) await t.say(prompt, { pause: 120 });
+          const correct = Array.isArray(opts.correct) ? opts.correct : [opts.correct];
+          setPrompt(prompt, opts.hints);
+          const box = append(el('div', 'choices reveal'));
+          return new Promise((resolve) => {
+            options.forEach((label, i) => {
+              const b = el('button', '', md(label));
+              b.addEventListener('click', async () => {
+                if (run.cancelled) return;
+                t.learnerSays(label);
+                const ok = correct.includes(i);
+                record({ kind: 'choice', prompt, answer: label, correct: ok });
+                if (ok) {
+                  b.classList.add('right');
+                  box.querySelectorAll('button').forEach((x) => (x.disabled = true));
+                  clearPrompt();
+                  if (opts.explainRight) t.right(typeof opts.explainRight === 'function' ? opts.explainRight(i) : opts.explainRight);
+                  resolve(i);
+                } else {
+                  b.classList.add('wrong');
+                  b.disabled = true;
+                  const fb = (opts.feedback && (opts.feedback[i] != null ? opts.feedback[i] : opts.feedback.default))
+                    || '这个选项不对。看看上面的画面，再选一个。';
+                  t.wrong(typeof fb === 'function' ? fb(i) : fb);
+                }
+              });
+              box.appendChild(b);
+            });
+          });
+        },
+        /* Prediction: every answer is accepted. Resolves with the chosen index. */
+        async predict(prompt, options, opts = {}) {
+          const g = guard(); if (g) return g;
+          if (prompt) await t.say(prompt, { pause: 120 });
+          setPrompt(prompt, opts.hints);
+          const box = append(el('div', 'choices reveal'));
+          return new Promise((resolve) => {
+            options.forEach((label, i) => {
+              const b = el('button', '', md(label));
+              b.addEventListener('click', () => {
+                if (run.cancelled) return;
+                t.learnerSays(label);
+                record({ kind: 'predict', prompt, answer: label });
+                b.classList.add('picked');
+                box.querySelectorAll('button').forEach((x) => (x.disabled = true));
+                clearPrompt();
+                resolve(i);
+              });
+              box.appendChild(b);
+            });
+          });
+        },
+        /* Integer answer. opts.feedback(v) may return a diagnosis string for a specific wrong value. */
+        async number(prompt, opts = {}) {
+          const g = guard(); if (g) return g;
+          if (prompt) await t.say(prompt, { pause: 120 });
+          setPrompt(prompt, opts.hints);
+          const row = append(el('div', 'numask reveal'));
+          const input = el('input');
+          input.type = 'number'; input.inputMode = 'numeric'; input.placeholder = opts.placeholder || '填一个数字';
+          if (opts.min != null) input.min = opts.min;
+          const unit = el('span', 'unit', esc(opts.unit || ''));
+          const btn = el('button', 'btn primary', opts.button || '确定');
+          row.append(input, unit, btn);
+          setTimeout(() => input.focus({ preventScroll: true }), 80);
+          const accepted = Array.isArray(opts.answer) ? opts.answer : [opts.answer];
+          return new Promise((resolve) => {
+            const submit = () => {
+              if (run.cancelled) return;
+              const raw = input.value.trim();
+              if (raw === '' || !/^-?\d+$/.test(raw)) { input.focus(); return; }
+              const v = Number(raw);
+              t.learnerSays(String(v) + (opts.unit || ''));
+              const ok = accepted.includes(v);
+              record({ kind: 'number', prompt, answer: v, correct: ok });
+              if (ok) {
+                input.disabled = true; btn.disabled = true;
+                clearPrompt();
+                if (opts.explainRight) t.right(typeof opts.explainRight === 'function' ? opts.explainRight(v) : opts.explainRight);
+                resolve(v);
+              } else {
+                let fb = opts.feedback ? opts.feedback(v) : null;
+                if (!fb) fb = opts.defaultFeedback || `不是 ${v}。别急着猜，回到上面的画面，一个一个数。`;
+                t.wrong(fb);
+                input.value = ''; input.focus();
+              }
+            };
+            btn.addEventListener('click', submit);
+            input.addEventListener('keydown', (e) => { if (e.key === 'Enter') { e.preventDefault(); submit(); } });
+          });
+        },
+        /* A single button the learner presses when ready. */
+        async confirm(label, opts = {}) {
+          const g = guard(); if (g) return g;
+          const row = append(el('div', 'btn-row reveal'));
+          const b = el('button', 'btn ' + (opts.cls || 'primary'), esc(label));
+          row.appendChild(b);
+          return new Promise((resolve) => {
+            b.addEventListener('click', () => {
+              if (run.cancelled) return;
+              b.disabled = true;
+              if (opts.echo !== false) t.learnerSays(label);
+              resolve(true);
+            });
+          });
+        },
+      },
+      done(opts = {}) {
+        if (run.cancelled) return;
+        state.completed.add(run.screen.id);
+        state.index = screens.indexOf(run.screen);
+        save();
+        renderChrome();
+        const isLast = state.index >= screens.length - 1;
+        const next = screens[state.index + 1];
+        setDock({ hint: false, next: opts.label || (isLast ? '回到目录' : `下一屏：${next.title}`) });
+        clearPrompt();
+      },
+    };
+    return t;
+  }
+
+  // ---------- screen lifecycle ----------
+  async function showScreen(i) {
+    if (i < 0 || i >= screens.length) return;
+    if (current) current.cancelled = true;
+    const screen = screens[i];
+    state.index = i;
+    save();
+    const run = { screen, cancelled: false, prompt: '', hints: [], hintsShown: 0 };
+    current = run;
+    const feed = $('feed');
+    feed.innerHTML = '';
+    window.scrollTo({ top: 0 });
+    renderChrome();
+    setDock({ hint: false, next: null });
+    const t = makeTutor(run);
+    try {
+      await screen.run(t);
+    } catch (err) {
+      if (!run.cancelled) {
+        console.error(err);
+        feed.appendChild(el('div', 'bubble tutor error', md(`这一屏出了点技术问题（${esc(err.message || err)}）。你可以打开目录跳到下一屏，然后把这个问题告诉作者。`)));
+        setDock({ hint: false, next: i + 1 < screens.length ? `下一屏：${screens[i + 1].title}` : null });
+        state.completed.add(screen.id);
+      }
+    }
+  }
+
+  // ---------- AI mentor (optional; only when served by mentor_server.py) ----------
+  const Mentor = {
+    available: false,
+    history: [],
+    async init() {
+      try {
+        const r = await fetch('api/mentor/health', { cache: 'no-store' });
+        const j = await r.json();
+        this.available = !!j.ai;
+      } catch (e) { this.available = false; }
+      $('mentorBtn').hidden = !this.available;
+    },
+    context() {
+      const sc = current ? current.screen : null;
+      return {
+        screen_id: sc ? sc.id : null,
+        screen_title: sc ? sc.title : null,
+        screen_goal: sc ? sc.goal || null : null,
+        current_prompt: current ? current.prompt : null,
+        hints_available: current ? current.hints : [],
+        hints_shown: current ? current.hintsShown : 0,
+        recent_attempts: state.attempts.slice(-6).map((a) => ({ kind: a.kind, prompt: a.prompt, answer: a.answer, correct: a.correct, n: a.n })),
+      };
+    },
+    async ask(question) {
+      const res = await fetch('api/mentor', {
+        method: 'POST', headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ question, context: this.context(), history: this.history.slice(-8) }),
+      });
+      const j = await res.json();
+      if (!res.ok || j.error) throw new Error(j.error || ('HTTP ' + res.status));
+      this.history.push({ role: 'user', content: question }, { role: 'assistant', content: j.reply });
+      return j.reply;
+    },
+  };
+  function wireMentor() {
+    const sheet = $('mentor');
+    const log = $('mentorLog');
+    const addM = (cls, text) => { const m = el('div', 'm ' + cls, md(text)); log.appendChild(m); log.scrollTop = log.scrollHeight; return m; };
+    $('mentorBtn').addEventListener('click', () => {
+      sheet.hidden = !sheet.hidden;
+      if (!sheet.hidden) {
+        if (!log.childElementCount) addM('sys', '说说你卡在哪里。导师只会反问和提示，答案还是你自己找到的。');
+        $('mentorInput').focus();
+      }
+    });
+    $('mentorClose').addEventListener('click', () => { sheet.hidden = true; });
+    $('mentorForm').addEventListener('submit', async (e) => {
+      e.preventDefault();
+      const input = $('mentorInput');
+      const q = input.value.trim();
+      if (!q) return;
+      input.value = '';
+      addM('me', q);
+      state.attempts.push({ screen: current ? current.screen.id : null, kind: 'mentor_question', text: q });
+      const wait = addM('sys', '导师在想……（它会先想一会儿，大约十几秒）');
+      $('mentorSend').disabled = true;
+      try {
+        const reply = await Mentor.ask(q);
+        wait.remove();
+        addM('ai', reply);
+      } catch (err) {
+        wait.remove();
+        addM('sys', `导师暂时联系不上（${esc(err.message)}）。先用页面底部的“需要提示”。`);
+      } finally {
+        $('mentorSend').disabled = false;
+        input.focus();
+      }
+    });
+  }
+
+  // ---------- boot ----------
+  function start() {
+    load();
+    renderChrome();
+    $('tocBtn').addEventListener('click', () => toggleToc());
+    document.addEventListener('click', (e) => {
+      const toc = $('toc');
+      if (!toc.hidden && !toc.contains(e.target) && e.target !== $('tocBtn')) toggleToc(false);
+    });
+    $('hintBtn').addEventListener('click', showHint);
+    $('nextBtn').addEventListener('click', () => {
+      if (state.index + 1 < screens.length) showScreen(state.index + 1);
+      else { toggleToc(true); }
+    });
+    wireMentor();
+    Mentor.init();
+    showScreen(state.index);
+  }
+
+  window.FunAl = { register, start, showScreen, state, screens, el, md, esc, addStyle, sleep, Mentor };
+})();
+
+
+// ---- src/widgets.js ----
+/* FunAl shared widgets. Same look everywhere so the learner recognises "the same staircase / the same row of cells".
+ *
+ *   const st = FunAl.widgets.stairs(container, { n: 6, tolls: [0,1,2,9,1,5,1], controls: true, maxStep: 2 })
+ *     st.onStep(({ pos, path, cost, done }) => ...)   fired after each move; done = reached n
+ *     st.step(k) / st.reset() / st.setCurrent(i) / st.mark(i,'cls') / st.clearMarks() / st.enable(bool) / st.pickable(fn)
+ *     st.path  -> [1,2,1]   st.visited -> [0,1,3,4]   st.cost -> total tolls paid
+ *
+ *   const row = FunAl.widgets.cells(container, { n: 6, label: i => `第 ${i} 级`, sub: i => `过路费 ${toll[i]}`, values: {0: 1, 1: 1} })
+ *     row.set(i, v) / row.get(i) / row.mark(i,'cls') / row.links(i, [i-1, i-2]) / row.clearLinks()
+ *     await row.fill(i, { answer: 5, onWrong: v => t.wrong('...'), onRight: v => ... })  loops until correct
+ *
+ *   FunAl.widgets.routeChips(container, ['1+1+2', '2+2'], { onClick })  -> row of route chips
+ *   FunAl.widgets.person()  -> a small SVG figure element
+ */
+(function () {
+  'use strict';
+  const { el, esc, addStyle } = FunAl;
+
+  addStyle(`
+  .w-stairs { display: flex; flex-direction: column; gap: 12px; }
+  .w-stairs-row { display: flex; align-items: flex-end; gap: 6px; padding: 8px 4px 0; min-height: 60px; }
+  .w-step { flex: 1 1 0; min-width: 54px; position: relative; display: flex; flex-direction: column; align-items: center; justify-content: flex-end;
+    background: var(--accent-soft); border: 1.5px solid var(--line); border-radius: 10px 10px 4px 4px; height: var(--h, 48px); transition: background .2s, border-color .2s; }
+  .w-step .w-step-label { position: absolute; bottom: 6px; font-size: .78rem; color: var(--muted); white-space: nowrap; }
+  .w-step .w-tag { position: absolute; top: -14px; right: -4px; background: var(--paper); border: 1.5px solid var(--warn); color: var(--warn); font-weight: 700; font-size: .78rem; padding: 0 6px; border-radius: 6px; line-height: 1.4; }
+  .w-step .w-tag.hot { background: var(--warn); color: #fff; }
+  .w-step .w-person { position: absolute; bottom: 26px; width: 26px; height: 34px; }
+  .w-step.visited::after { content: ""; position: absolute; top: 6px; width: 8px; height: 8px; border-radius: 50%; background: var(--accent); }
+  .w-step.current { border-color: var(--accent); background: color-mix(in srgb, var(--accent) 22%, var(--paper)); }
+  .w-step.finish { border-color: var(--ok); }
+  .w-step.pickable { cursor: pointer; }
+  .w-step.pickable:hover { border-color: var(--accent); }
+  .w-step.good { border-color: var(--ok); background: var(--ok-soft); }
+  .w-step.bad { border-color: var(--warn); background: var(--warn-soft); }
+  .w-step.gold { border-color: #c9a227; background: #fff7d6; }
+  .w-step.dim { opacity: .45; }
+  .w-stairs-controls { display: flex; gap: 10px; flex-wrap: wrap; align-items: center; }
+  .w-path { display: flex; gap: 6px; flex-wrap: wrap; align-items: center; min-height: 28px; color: var(--muted); font-size: .95rem; }
+  .w-path .chip { background: var(--paper); border: 1.5px solid var(--line); border-radius: 999px; padding: 1px 10px; font-weight: 600; color: var(--ink); }
+  .w-path .chip.two { border-color: var(--accent); }
+  .w-cost { font-weight: 700; color: var(--warn); }
+
+  .w-cells { position: relative; }
+  .w-cells-title { font-weight: 600; margin-bottom: 8px; }
+  .w-cells-row { display: flex; gap: 8px; align-items: flex-start; padding-top: 40px; }
+  .w-cell { flex: 1 1 0; min-width: 58px; display: flex; flex-direction: column; align-items: center; gap: 4px; }
+  .w-cell .w-cell-idx { font-size: .8rem; color: var(--ink); font-weight: 600; white-space: nowrap; }
+  .w-cell .w-cell-val { width: 100%; min-height: 54px; border: 1.5px solid var(--line); border-radius: 10px; background: var(--paper); display: flex; align-items: center; justify-content: center; font-size: 1.25rem; font-weight: 700; transition: background .2s, border-color .2s; }
+  .w-cell .w-cell-val.empty { color: var(--muted); font-weight: 400; }
+  .w-cell .w-cell-val.filled { background: var(--hint-soft); border-color: #d9b64a; }
+  .w-cell .w-cell-val.given { background: var(--accent-soft); }
+  .w-cell .w-cell-val.active { border-color: var(--accent); box-shadow: 0 0 0 3px var(--accent-soft); }
+  .w-cell .w-cell-val.good { border-color: var(--ok); background: var(--ok-soft); }
+  .w-cell .w-cell-val.gold { border-color: #c9a227; background: #fff7d6; }
+  .w-cell .w-cell-val.src { border-color: var(--accent); background: var(--accent-soft); }
+  .w-cell .w-cell-val input { width: 100%; height: 100%; min-height: 50px; border: 0; background: transparent; text-align: center; font: inherit; font-size: 1.25rem; font-weight: 700; color: var(--ink); outline: none; }
+  .w-cell .w-cell-sub { font-size: .78rem; color: var(--warn); font-weight: 600; min-height: 1.2em; white-space: nowrap; }
+  .w-cells svg.w-links { position: absolute; left: 0; top: 0; width: 100%; height: 100%; pointer-events: none; overflow: visible; }
+  .w-cells svg.w-links path { fill: none; stroke: var(--accent); stroke-width: 2.2; }
+  .w-cells svg.w-links path.pick { stroke: var(--ok); stroke-width: 3; }
+  .w-cells svg.w-links path.dim { stroke: var(--line); stroke-dasharray: 4 4; }
+  .w-cells svg.w-links text { font-size: 12px; fill: var(--muted); font-weight: 600; }
+  .w-cell-ok { display: flex; gap: 6px; margin-top: 6px; }
+  .w-fill-row { display: flex; gap: 8px; align-items: center; margin-top: 10px; flex-wrap: wrap; }
+  .w-fill-row .eq { font-family: var(--mono); font-size: 1rem; color: var(--muted); }
+
+  .w-chips { display: flex; gap: 8px; flex-wrap: wrap; }
+  .w-chip { border: 1.5px solid var(--line); background: var(--paper); border-radius: 10px; padding: 6px 12px; font-weight: 600; font-family: var(--mono); font-size: .95rem; }
+  .w-chip.btn-like { cursor: pointer; }
+  .w-chip.btn-like:hover { border-color: var(--accent); }
+  .w-chip.dup { border-color: var(--warn); background: var(--warn-soft); }
+  .w-chip.new { animation: pop .3s ease-out; }
+  .w-chip.gold { border-color: #c9a227; background: #fff7d6; }
+
+  /* ---- tree ---- */
+  .w-tree { overflow-x: auto; padding: 4px 0 8px; }
+  .w-tree-inner { display: inline-block; min-width: 100%; }
+  .w-node { display: flex; flex-direction: column; align-items: center; }
+  .w-node-box { border: 1.5px solid var(--line); background: var(--paper); border-radius: 10px; padding: 5px 10px; font-weight: 600; font-size: .9rem; white-space: nowrap; position: relative; }
+  .w-node-box.can { cursor: pointer; border-color: var(--accent); color: var(--accent); }
+  .w-node-box.can:hover { background: var(--accent-soft); }
+  .w-node-box.leaf { border-color: var(--ok); background: var(--ok-soft); }
+  .w-node-box.dup { border-color: var(--warn); background: var(--warn-soft); }
+  .w-node-box.cached { border-color: var(--ok); background: var(--ok-soft); color: var(--ok); }
+  .w-node-box.solved { background: var(--accent-soft); }
+  .w-node-kids { display: flex; gap: 10px; align-items: flex-start; padding-top: 16px; position: relative; }
+  .w-node-kids::before { content: ""; position: absolute; top: 0; left: 50%; width: 1.5px; height: 8px; background: var(--line); }
+  .w-node-kid { position: relative; padding-top: 10px; }
+  .w-node-kid::before { content: ""; position: absolute; top: 0; left: 50%; width: 1.5px; height: 10px; background: var(--line); }
+  .w-node-kids > .w-node-kid + .w-node-kid::after { content: ""; position: absolute; top: 0; right: 50%; width: 100%; height: 1.5px; background: var(--line); }
+  .w-tree-hud { display: flex; gap: 16px; flex-wrap: wrap; align-items: baseline; margin-bottom: 8px; font-size: .95rem; }
+  .w-tree-hud b { font-size: 1.3rem; font-variant-numeric: tabular-nums; }
+
+  /* ---- buckets ---- */
+  .w-buckets { display: flex; flex-direction: column; gap: 12px; }
+  .w-bucket-pool { display: flex; gap: 8px; flex-wrap: wrap; min-height: 44px; padding: 8px; border: 1.5px dashed var(--line); border-radius: 12px; }
+  .w-bucket-pool:empty::after { content: "卡片都分完了"; color: var(--muted); font-size: .9rem; }
+  .w-bucket-row { display: flex; gap: 12px; flex-wrap: wrap; }
+  .w-bucket { flex: 1 1 200px; border: 1.5px solid var(--line); border-radius: 12px; padding: 10px; background: var(--paper); min-height: 96px; }
+  .w-bucket.armed { border-color: var(--accent); background: var(--accent-soft); cursor: pointer; }
+  .w-bucket-title { font-weight: 600; font-size: .9rem; margin-bottom: 8px; }
+  .w-bucket-title .cnt { color: var(--muted); font-weight: 400; }
+  .w-bucket-items { display: flex; gap: 8px; flex-wrap: wrap; min-height: 34px; }
+  .w-card { border: 1.5px solid var(--line); background: var(--paper); border-radius: 10px; padding: 5px 10px; font-family: var(--mono); font-weight: 600; font-size: .92rem; cursor: pointer; }
+  .w-card.sel { border-color: var(--accent); background: var(--accent-soft); box-shadow: 0 0 0 3px var(--accent-soft); }
+  .w-card.in { cursor: default; }
+  .w-card .tail { color: var(--warn); }
+  .w-card.cut .tail { text-decoration: line-through; opacity: .45; }
+  .w-card.shake { animation: shake .3s; }
+  @keyframes shake { 25% { transform: translateX(-4px);} 75% { transform: translateX(4px);} }
+
+  /* ---- notebook ---- */
+  .w-book { border: 1.5px solid var(--line); border-radius: 12px; background: var(--hint-soft); padding: 10px 12px; min-width: 170px; }
+  .w-book-title { font-weight: 700; font-size: .9rem; margin-bottom: 6px; }
+  .w-book-row { display: flex; justify-content: space-between; gap: 10px; border-bottom: 1px dashed rgba(0,0,0,.15); padding: 3px 0; font-size: .92rem; }
+  .w-book-row .v { font-weight: 700; }
+  .w-book-row.empty .v { color: var(--muted); font-weight: 400; }
+  .w-book-row.fresh { animation: pop .3s ease-out; }
+  .w-side { display: flex; gap: 14px; align-items: flex-start; flex-wrap: wrap; }
+  .w-side-main { flex: 1 1 320px; min-width: 0; }
+  .w-side-aside { flex: 0 0 auto; position: sticky; top: 60px; }
+  @media (max-width: 620px) { .w-side { flex-direction: column; } .w-side-aside { position: static; width: 100%; } }
+
+  @keyframes pop { from { transform: scale(.85); opacity: 0; } to { transform: none; opacity: 1; } }
+  `);
+
+  function person() {
+    const s = document.createElementNS('http://www.w3.org/2000/svg', 'svg');
+    s.setAttribute('viewBox', '0 0 26 34');
+    s.setAttribute('class', 'w-person');
+    s.innerHTML = '<circle cx="13" cy="6" r="5" fill="var(--accent)"/><path d="M13 11v11M13 14l-7 6M13 14l7 6M13 22l-5 10M13 22l5 10" stroke="var(--accent)" stroke-width="3" stroke-linecap="round" fill="none"/>';
+    return s;
+  }
+
+  /* ---------------- stairs ---------------- */
+  function stairs(container, opts) {
+    const o = Object.assign({ n: 6, tolls: null, controls: false, maxStep: 2, labels: null, start: 0, baseH: 40, stepH: 13, showCost: false }, opts);
+    const root = el('div', 'w-stairs');
+    const row = el('div', 'w-stairs-row');
+    const steps = [];
+    for (let i = 0; i <= o.n; i++) {
+      const st = el('div', 'w-step' + (i === o.n ? ' finish' : ''));
+      st.style.setProperty('--h', (o.baseH + i * o.stepH) + 'px');
+      const label = o.labels ? o.labels(i) : (i === 0 ? '地面' : (i === o.n ? `第 ${i} 级·终点` : `第 ${i} 级`));
+      st.appendChild(el('div', 'w-step-label', esc(label)));
+      if (o.tolls && i > 0 && o.tolls[i] != null) st.appendChild(el('div', 'w-tag' + (o.hot && o.hot.includes(i) ? ' hot' : ''), esc(`${o.tolls[i]} 元`)));
+      st.dataset.i = i;
+      row.appendChild(st);
+      steps.push(st);
+    }
+    root.appendChild(row);
+    const fig = person();
+    const pathRow = el('div', 'w-path');
+    root.appendChild(pathRow);
+    let controls = null, b1 = null, b2 = null, br = null;
+    if (o.controls) {
+      controls = el('div', 'w-stairs-controls');
+      b1 = el('button', 'btn primary', '走 1 级');
+      b2 = el('button', 'btn primary', '走 2 级');
+      br = el('button', 'btn', '重来');
+      controls.append(b1, b2, br);
+      if (o.maxStep >= 3) { const b3 = el('button', 'btn primary', '走 3 级'); controls.insertBefore(b3, br); b3.addEventListener('click', () => api.step(3)); }
+      root.appendChild(controls);
+      b1.addEventListener('click', () => api.step(1));
+      b2.addEventListener('click', () => api.step(2));
+      br.addEventListener('click', () => api.reset());
+    }
+    container.appendChild(root);
+
+    const listeners = [];
+    const api = {
+      el: root, steps, pos: o.start, path: [], visited: [o.start], cost: 0, enabled: true,
+      onStep(fn) { listeners.push(fn); return api; },
+      render() {
+        steps.forEach((s, i) => {
+          s.classList.toggle('current', i === api.pos);
+          s.classList.toggle('visited', api.visited.includes(i) && i !== api.pos);
+        });
+        if (fig.parentNode) fig.parentNode.removeChild(fig);
+        steps[api.pos].appendChild(fig);
+        pathRow.innerHTML = '';
+        if (api.path.length) {
+          pathRow.appendChild(el('span', '', '走法：'));
+          api.path.forEach((k, idx) => {
+            pathRow.appendChild(el('span', 'chip' + (k === 2 ? ' two' : ''), `+${k}`));
+            if (idx < api.path.length - 1) pathRow.appendChild(el('span', '', '·'));
+          });
+          if (o.tolls && o.showCost) pathRow.appendChild(el('span', 'w-cost', `　已付 ${api.cost} 元`));
+        } else {
+          pathRow.appendChild(el('span', 'muted small', o.emptyHint || '还没走。'));
+        }
+        if (controls) {
+          const canMove = api.enabled && api.pos < o.n;
+          b1.disabled = !canMove || api.pos + 1 > o.n;
+          b2.disabled = !canMove || api.pos + 2 > o.n;
+          controls.querySelectorAll('button').forEach((b) => { if (b.textContent === '走 3 级') b.disabled = !canMove || api.pos + 3 > o.n; });
+        }
+      },
+      step(k) {
+        if (!api.enabled || api.pos + k > o.n) return false;
+        api.pos += k;
+        api.path.push(k);
+        api.visited.push(api.pos);
+        if (o.tolls) api.cost += (o.tolls[api.pos] || 0);
+        api.render();
+        const ev = { pos: api.pos, path: api.path.slice(), visited: api.visited.slice(), cost: api.cost, done: api.pos === o.n };
+        listeners.forEach((fn) => fn(ev));
+        return true;
+      },
+      reset() { api.pos = o.start; api.path = []; api.visited = [o.start]; api.cost = 0; api.render(); listeners.forEach((fn) => fn({ pos: api.pos, path: [], visited: [o.start], cost: 0, done: false, reset: true })); },
+      setCurrent(i) { api.pos = i; api.render(); },
+      enable(v) { api.enabled = v !== false; api.render(); },
+      mark(i, cls) { if (steps[i]) steps[i].classList.add(cls); },
+      unmark(i, cls) { if (steps[i]) steps[i].classList.remove(cls); },
+      clearMarks() { steps.forEach((s) => s.classList.remove('good', 'bad', 'gold', 'dim')); },
+      pickable(fn) {
+        steps.forEach((s, i) => {
+          s.classList.toggle('pickable', !!fn);
+          s.onclick = fn ? () => fn(i, s) : null;
+        });
+      },
+      hideControls() { if (controls) controls.hidden = true; },
+      showControls() { if (controls) controls.hidden = false; },
+      showPath(path) { // display a given route on the stairs without moving the learner
+        api.reset(); api.enabled = false;
+        path.forEach((k) => { api.pos += k; api.path.push(k); api.visited.push(api.pos); if (o.tolls) api.cost += (o.tolls[api.pos] || 0); });
+        api.render();
+      },
+    };
+    api.render();
+    return api;
+  }
+
+  /* ---------------- cells (a DP row) ---------------- */
+  function cells(container, opts) {
+    const o = Object.assign({ n: 6, label: (i) => `第 ${i} 级`, sub: null, values: {}, title: '', placeholder: '?' }, opts);
+    const root = el('div', 'w-cells');
+    if (o.title) root.appendChild(el('div', 'w-cells-title', esc(o.title)));
+    const row = el('div', 'w-cells-row');
+    const svg = document.createElementNS('http://www.w3.org/2000/svg', 'svg');
+    svg.setAttribute('class', 'w-links');
+    root.appendChild(svg);
+    const items = [];
+    const vals = {};
+    for (let i = 0; i <= o.n; i++) {
+      const c = el('div', 'w-cell');
+      const v = el('div', 'w-cell-val empty', esc(o.placeholder));
+      c.appendChild(v);
+      c.appendChild(el('div', 'w-cell-idx', esc(o.label(i))));
+      const sub = el('div', 'w-cell-sub', o.sub ? esc(o.sub(i)) : '');
+      c.appendChild(sub);
+      row.appendChild(c);
+      items.push({ c, v, sub });
+    }
+    root.appendChild(row);
+    container.appendChild(root);
+
+    const api = {
+      el: root, items,
+      get(i) { return vals[i]; },
+      set(i, value, cls) {
+        vals[i] = value;
+        const v = items[i].v;
+        v.innerHTML = esc(String(value));
+        v.classList.remove('empty', 'active', 'given', 'filled', 'good', 'gold', 'src');
+        v.classList.add(cls || 'filled');
+      },
+      mark(i, cls) { items[i].v.classList.add(cls); },
+      unmark(i, cls) { items[i].v.classList.remove(cls); },
+      clearMarks(cls) { items.forEach((it) => it.v.classList.remove(...(cls ? [cls] : ['active', 'good', 'gold', 'src']))); },
+      setSub(i, text) { items[i].sub.textContent = text; },
+      links(i, preds, labels) {
+        api.clearLinks();
+        const rr = root.getBoundingClientRect();
+        const to = items[i].v.getBoundingClientRect();
+        const tx = to.left - rr.left + to.width / 2, ty = to.top - rr.top;
+        preds.forEach((p, k) => {
+          if (p < 0 || p > o.n) return;
+          const from = items[p].v.getBoundingClientRect();
+          const fx = from.left - rr.left + from.width / 2, fy = from.top - rr.top;
+          const lift = 22 + Math.abs(i - p) * 8;
+          const path = document.createElementNS('http://www.w3.org/2000/svg', 'path');
+          path.setAttribute('d', `M ${fx} ${fy} C ${fx} ${fy - lift}, ${tx} ${ty - lift}, ${tx} ${ty}`);
+          path.dataset.from = p;
+          svg.appendChild(path);
+          if (labels && labels[k] != null) {
+            const t = document.createElementNS('http://www.w3.org/2000/svg', 'text');
+            t.setAttribute('x', (fx + tx) / 2); t.setAttribute('y', ty - lift + 2); t.setAttribute('text-anchor', 'middle');
+            t.textContent = labels[k];
+            svg.appendChild(t);
+          }
+        });
+      },
+      markLink(from, cls) { svg.querySelectorAll('path').forEach((p) => { if (Number(p.dataset.from) === from) p.classList.add(cls); }); },
+      clearLinks() { svg.innerHTML = ''; },
+      /* Loop until the learner types the right integer into cell i. */
+      fill(i, opts2) {
+        const f = Object.assign({ answer: null, onWrong: null, onRight: null, button: '填上' }, opts2);
+        const v = items[i].v;
+        v.classList.remove('empty'); v.classList.add('active');
+        v.innerHTML = '';
+        const input = el('input');
+        input.type = 'number'; input.inputMode = 'numeric'; input.placeholder = '?';
+        v.appendChild(input);
+        const okRow = el('div', 'w-cell-ok');
+        const ok = el('button', 'btn primary', f.button);
+        okRow.appendChild(ok);
+        items[i].c.appendChild(okRow);
+        setTimeout(() => input.focus({ preventScroll: true }), 60);
+        const accepted = Array.isArray(f.answer) ? f.answer : [f.answer];
+        return new Promise((resolve) => {
+          const submit = () => {
+            const raw = input.value.trim();
+            if (!/^-?\d+$/.test(raw)) { input.focus(); return; }
+            const n = Number(raw);
+            if (f.answer == null || accepted.includes(n)) {
+              okRow.remove();
+              api.set(i, n, 'good');
+              if (f.onRight) f.onRight(n);
+              resolve(n);
+            } else {
+              input.value = '';
+              input.focus();
+              v.classList.add('bad-flash');
+              setTimeout(() => v.classList.remove('bad-flash'), 400);
+              if (f.onWrong) f.onWrong(n);
+            }
+          };
+          ok.addEventListener('click', submit);
+          input.addEventListener('keydown', (e) => { if (e.key === 'Enter') { e.preventDefault(); submit(); } });
+        });
+      },
+    };
+    Object.keys(o.values).forEach((k) => api.set(Number(k), o.values[k], 'given'));
+    return api;
+  }
+
+  /* ---------------- route chips ---------------- */
+  function routeChips(container, routes, opts) {
+    const o = Object.assign({ onClick: null, format: (r) => (Array.isArray(r) ? r.map((k) => `+${k}`).join(' ') : String(r)) }, opts);
+    const root = el('div', 'w-chips');
+    container.appendChild(root);
+    const api = {
+      el: root, chips: [],
+      add(route, cls) {
+        const ch = el('div', 'w-chip new' + (cls ? ' ' + cls : '') + (o.onClick ? ' btn-like' : ''), esc(o.format(route)));
+        if (o.onClick) ch.addEventListener('click', () => o.onClick(route, ch));
+        root.appendChild(ch); api.chips.push(ch);
+        return ch;
+      },
+      clear() { root.innerHTML = ''; api.chips = []; },
+    };
+    (routes || []).forEach((r) => api.add(r));
+    return api;
+  }
+
+
+  /* ---------------- recursion tree ---------------- */
+  /* nodes are "问题卡"; the learner clicks one to split it into its sub-questions.
+     opts: { root, children(n) -> [subs] or null for a leaf, leafValue(n), label(n),
+             memo: bool (offer "查账本" when a value is known), book: notebook api } */
+  function tree(container, opts) {
+    const o = Object.assign({ root: 6, label: (n) => `到第 ${n} 级？`, children: (n) => (n <= 1 ? null : [n - 1, n - 2]),
+      leafValue: () => 1, memo: false, book: null, hud: true, autoLeaf: true }, opts);
+    const root = el('div', 'w-tree');
+    const hud = el('div', 'w-tree-hud');
+    const inner = el('div', 'w-tree-inner');
+    if (o.hud) container.appendChild(hud);
+    root.appendChild(inner);
+    container.appendChild(root);
+
+    const seen = new Map();      // value -> times this question has appeared
+    const listeners = [];
+    let opened = 0, dupCount = 0, computed = 0, lookups = 0;
+
+    function hudRender() {
+      if (!o.hud) return;
+      hud.innerHTML = '';
+      const add = (label, v, cls) => { const d = el('div', cls || '', `${esc(label)} <b>${v}</b>`); hud.appendChild(d); };
+      add('展开过的问题卡：', opened);
+      if (!o.memo) add('其中重复出现：', dupCount);
+      else { add('真正算过：', computed); add('直接抄账本：', lookups); }
+    }
+
+    function makeNode(n, depth) {
+      const node = el('div', 'w-node');
+      const box = el('div', 'w-node-box', esc(o.label(n)));
+      node.appendChild(box);
+      const times = (seen.get(n) || 0) + 1;
+      seen.set(n, times);
+      const kidsOf = o.children(n);
+      const known = o.book && o.book.get(n) != null;
+      const state = { n, node, box, expanded: false, value: null };
+
+      if (!kidsOf) {                                  // a leaf: answer is obvious
+        state.value = o.leafValue(n);
+        box.classList.add('leaf');
+        box.innerHTML = esc(o.label(n) + ' = ' + state.value);
+        return state;
+      }
+      if (times > 1 && !o.memo) { box.classList.add('dup'); dupCount++; }
+      if (o.memo && known) box.classList.add('cached');
+      box.classList.add('can');
+      box.onclick = () => {
+        if (state.expanded) return;
+        if (o.memo && o.book && o.book.get(n) != null) {   // take it from the notebook
+          state.expanded = true;
+          state.value = o.book.get(n);
+          box.classList.remove('can'); box.classList.add('cached');
+          box.innerHTML = esc(o.label(n) + ' = ' + state.value) + ' <span class="small">（抄的）</span>';
+          lookups++; hudRender();
+          listeners.forEach((f) => f({ kind: 'lookup', n, value: state.value, api }));
+          if (state.parent) settle(state.parent);   // an answer copied from the book still counts upward
+          return;
+        }
+        state.expanded = true;
+        opened++;
+        box.classList.remove('can');
+        const kidsWrap = el('div', 'w-node-kids');
+        state.kids = kidsOf.map((k) => {
+          const w = el('div', 'w-node-kid');
+          const child = makeNode(k, depth + 1);
+          child.parent = state;
+          w.appendChild(child.node);
+          kidsWrap.appendChild(w);
+          return child;
+        });
+        node.appendChild(kidsWrap);
+        computed++;
+        hudRender();
+        settle(state);
+        listeners.forEach((f) => f({ kind: 'open', n, api }));
+      };
+      return state;
+    }
+
+    /* when every child of a node has a value, the node gets one too (and goes into the book) */
+    function settle(state) {
+      if (!state.kids || state.value != null) return;
+      if (state.kids.some((k) => k.value == null)) return;
+      state.value = state.kids.reduce((a, k) => a + k.value, 0);
+      state.box.classList.add('solved');
+      state.box.innerHTML = esc(o.label(state.n) + ' = ' + state.value);
+      if (o.book) o.book.set(state.n, state.value);
+      listeners.forEach((f) => f({ kind: 'solved', n: state.n, value: state.value, api }));
+      if (state.parent) settle(state.parent);
+    }
+
+    const rootState = makeNode(o.root, 0);
+    inner.appendChild(rootState.node);
+    hudRender();
+
+    const api = {
+      el: root, rootState,
+      on(fn) { listeners.push(fn); return api; },
+      get stats() { return { opened, dupCount, computed, lookups, distinct: seen.size }; },
+      get value() { return rootState.value; },
+      allOpened() {
+        const walk = (s) => (s.kids ? s.kids.every(walk) : true) && (s.value != null);
+        return walk(rootState);
+      },
+      scrollRight() { root.scrollLeft = root.scrollWidth; },
+    };
+    return api;
+  }
+
+  /* ---------------- buckets (tap card, then tap bucket: works on phones) ---------------- */
+  function buckets(container, opts) {
+    const o = Object.assign({ cards: [], buckets: [], answer: () => 0, format: (c) => String(c),
+      onWrong: null, onRight: null, onDone: null, poolLabel: '把下面的卡片一张张分进两个筐：' }, opts);
+    const root = el('div', 'w-buckets');
+    if (o.poolLabel) root.appendChild(el('div', 'small muted', esc(o.poolLabel)));
+    const pool = el('div', 'w-bucket-pool');
+    root.appendChild(pool);
+    const row = el('div', 'w-bucket-row');
+    const bs = o.buckets.map((b, i) => {
+      const box = el('div', 'w-bucket');
+      box.appendChild(el('div', 'w-bucket-title', esc(b) + ' <span class="cnt">（0 张）</span>'));
+      const items = el('div', 'w-bucket-items');
+      box.appendChild(items);
+      box.onclick = () => place(i);
+      row.appendChild(box);
+      return { box, items, count: 0, cards: [] };
+    });
+    root.appendChild(row);
+    container.appendChild(root);
+
+    let selected = null;
+    let placed = 0;
+    const cardEls = o.cards.map((c, i) => {
+      const e = el('div', 'w-card', o.format(c));
+      e.onclick = () => {
+        if (e.classList.contains('in')) return;
+        if (selected) selected.el.classList.remove('sel');
+        selected = { c, el: e, i };
+        e.classList.add('sel');
+        bs.forEach((b) => b.box.classList.add('armed'));
+      };
+      pool.appendChild(e);
+      return e;
+    });
+
+    function place(bi) {
+      if (!selected) return;
+      const want = o.answer(selected.c, selected.i);
+      if (want !== bi) {
+        selected.el.classList.add('shake');
+        setTimeout(() => selected && selected.el.classList.remove('shake'), 320);
+        if (o.onWrong) o.onWrong(selected.c, bi, want);
+        return;
+      }
+      const e = selected.el;
+      e.classList.remove('sel'); e.classList.add('in');
+      bs[bi].items.appendChild(e);
+      bs[bi].count++;
+      bs[bi].cards.push(selected.c);
+      bs[bi].box.querySelector('.cnt').textContent = `（${bs[bi].count} 张）`;
+      bs.forEach((b) => b.box.classList.remove('armed'));
+      const done = ++placed === o.cards.length;
+      if (o.onRight) o.onRight(selected.c, bi, done);
+      selected = null;
+      if (done && o.onDone) o.onDone(bs.map((b) => b.cards));
+    }
+
+    return {
+      el: root, buckets: bs,
+      counts() { return bs.map((b) => b.count); },
+      cutTails(cls) { cardEls.forEach((e) => e.classList.add(cls || 'cut')); },
+      highlight(bi, cls) { bs[bi].box.classList.add(cls || 'armed'); },
+    };
+  }
+
+  /* ---------------- notebook / 账本 ---------------- */
+  function notebook(container, opts) {
+    const o = Object.assign({ title: '账本', rows: [], label: (k) => `到第 ${k} 级`, empty: '还没记' }, opts);
+    const root = el('div', 'w-book');
+    root.appendChild(el('div', 'w-book-title', esc(o.title)));
+    const map = {};
+    const rows = {};
+    o.rows.forEach((k) => {
+      const r = el('div', 'w-book-row empty');
+      r.appendChild(el('span', '', esc(o.label(k))));
+      r.appendChild(el('span', 'v', esc(o.empty)));
+      root.appendChild(r);
+      rows[k] = r;
+    });
+    container.appendChild(root);
+    return {
+      el: root,
+      get(k) { return map[k]; },
+      set(k, v) {
+        map[k] = v;
+        const r = rows[k];
+        if (!r) return;
+        r.classList.remove('empty');
+        r.classList.add('fresh');
+        r.querySelector('.v').textContent = String(v);
+        setTimeout(() => r.classList.remove('fresh'), 400);
+      },
+      clear() { Object.keys(map).forEach((k) => { delete map[k]; const r = rows[k]; if (r) { r.classList.add('empty'); r.querySelector('.v').textContent = o.empty; } }); },
+      size() { return Object.keys(map).length; },
+    };
+  }
+
+  FunAl.widgets = { stairs, cells, routeChips, person, tree, buckets, notebook };
+})();
+
+
+// ---- src/levels/00_smoke.js ----
+FunAl.register({
+  id: 'smoke', title: '控件冒烟测试 2', goal: 'tree/buckets/notebook smoke', minutes: 1,
+  async run(t) {
+    t.html('<div class="title-card"><h1>控件冒烟测试 2</h1></div>');
+    await t.say('分桶：把 5 条路线按最后一步分开。');
+    const routes = [[1,1,1,1],[1,1,2],[1,2,1],[2,1,1],[2,2]];
+    const bk = FunAl.widgets.buckets(t.canvas(), {
+      cards: routes, buckets: ['最后一步 +1（从第 3 级来）', '最后一步 +2（从第 2 级来）'],
+      format: (r) => r.map((k) => `+${k}`).join(' ').replace(/(\+\d)$/, '<span class="tail">$1</span>'),
+      answer: (r) => (r[r.length - 1] === 1 ? 0 : 1),
+      onWrong: () => t.wrong('这条路线的最后一个数字不是这个。'),
+    });
+    await t.waitFor((resolve) => { bk.el.dataset.k = 1; const o = bk; const orig = o; setTimeout(function chk(){ if (o.counts()[0] + o.counts()[1] === 5) resolve(true); else setTimeout(chk, 200); }, 200); });
+    t.right(`分完了：${bk.counts()[0]} 条 + ${bk.counts()[1]} 条`);
+    await t.say('递归树 + 账本：点开问题卡。');
+    const side = t.canvas(); side.className += ' w-side';
+    const treeBox = document.createElement('div');
+    const bookBox = document.createElement('div');
+    side.append(treeBox, bookBox);
+    const book = FunAl.widgets.notebook(bookBox, { title: '账本', rows: [2,3,4,5,6] });
+    const tr = FunAl.widgets.tree(treeBox, { root: 6, memo: true, book });
+    await t.waitFor((resolve) => tr.on((ev) => { if (ev.kind === 'solved' && ev.n === 6) resolve(ev.value); }));
+    t.note('结果', `根节点 = ${tr.value}；真正算过 ${tr.stats.computed} 次，抄账本 ${tr.stats.lookups} 次。`);
+    t.done();
+  },
+});
+
+
+// ---- src/main.js ----
+/* Entry point: boot once all level modules have registered their screens. */
+document.addEventListener('DOMContentLoaded', () => FunAl.start());
+
+</script>
+</body>
+</html>

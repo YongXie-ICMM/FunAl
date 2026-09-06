@@ -1,0 +1,40 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>动态规划，从一段楼梯开始</title>
+<meta name="description" content="一个循循善诱的互动教程：不背公式，亲手发现动态规划为什么存在、怎么用。">
+<!--__CSS__-->
+</head>
+<body>
+<div id="app" class="app">
+  <header class="topbar">
+    <button class="topbar-btn" id="tocBtn" aria-haspopup="true" aria-expanded="false" title="目录">目录</button>
+    <div class="topbar-title" id="topbarTitle"></div>
+    <div class="topbar-progress" id="topbarProgress" aria-label="进度"></div>
+  </header>
+  <nav class="toc" id="toc" hidden></nav>
+  <main class="feed" id="feed" aria-live="polite"></main>
+  <footer class="dock" id="dock">
+    <button class="dock-btn ghost" id="hintBtn" hidden>需要提示</button>
+    <button class="dock-btn ghost" id="mentorBtn" hidden>问导师</button>
+    <button class="dock-btn primary" id="nextBtn" hidden>下一步</button>
+  </footer>
+</div>
+
+<aside class="mentor" id="mentor" hidden aria-label="AI 导师">
+  <div class="mentor-head">
+    <strong>导师</strong>
+    <span class="mentor-sub" id="mentorSub">它知道你现在在哪一屏、刚才答了什么。它不会直接给答案。</span>
+    <button class="mentor-close" id="mentorClose" aria-label="关闭">×</button>
+  </div>
+  <div class="mentor-log" id="mentorLog"></div>
+  <form class="mentor-form" id="mentorForm">
+    <input id="mentorInput" type="text" autocomplete="off" placeholder="用自己的话说说卡在哪里……" maxlength="500">
+    <button type="submit" class="dock-btn primary" id="mentorSend">发送</button>
+  </form>
+</aside>
+<!--__JS__-->
+</body>
+</html>

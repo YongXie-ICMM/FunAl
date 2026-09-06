@@ -1,0 +1,14 @@
+# Secrets: the Kimi/Moonshot API key must never be committed.
+.env
+*.env
+!.env.example
+
+# Local tooling
+.claude/
+__pycache__/
+*.pyc
+.DS_Store
+
+# Previous ChatGPT-generated version, kept locally for reference only
+dp_game_tutorial(5).html
+design/old_chatgpt_version.html
