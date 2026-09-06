@@ -225,9 +225,18 @@
                 } else {
                   b.classList.add('wrong');
                   b.disabled = true;
-                  const fb = (opts.feedback && (opts.feedback[i] != null ? opts.feedback[i] : opts.feedback.default))
-                    || '这个选项不对。看看上面的画面，再选一个。';
-                  t.wrong(typeof fb === 'function' ? fb(i) : fb);
+                  /* feedback may be a function of the index, or an object keyed by index
+                     (with an optional `default`). A screen that supplies neither is a bug:
+                     say so loudly in the console rather than showing an empty platitude. */
+                  let fb = null;
+                  if (typeof opts.feedback === 'function') fb = opts.feedback(i);
+                  else if (opts.feedback) fb = opts.feedback[i] != null ? opts.feedback[i] : opts.feedback.default;
+                  if (typeof fb === 'function') fb = fb(i);
+                  if (!fb) {
+                    console.warn(`[FunAl] no diagnosis for wrong answer ${i} of "${prompt}"`);
+                    fb = '这个选项不对。回到上面的画面，对着数字再看一遍。';
+                  }
+                  t.wrong(fb);
                 }
               });
               box.appendChild(b);
