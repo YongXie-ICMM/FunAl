@@ -579,7 +579,15 @@
   const Mentor = {
     available: false,
     history: [],
+    /* Only look for a mentor where one could plausibly be running: the local proxy,
+       or anywhere the reader opts in with ?mentor=1. Probing from a static host would
+       just print a 404 in everyone's console. */
+    couldHaveServer() {
+      if (/[?&]mentor=1\b/.test(location.search)) return true;
+      return location.protocol.startsWith('http') && /^(localhost|127\.0\.0\.1|\[::1\])$/.test(location.hostname);
+    },
     async init() {
+      if (!this.couldHaveServer()) { $('mentorBtn').hidden = true; return; }
       try {
         const r = await fetch('api/mentor/health', { cache: 'no-store' });
         const j = await r.json();

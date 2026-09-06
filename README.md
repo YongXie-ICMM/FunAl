@@ -65,6 +65,7 @@ python3 mentor_server.py    # 打开 http://127.0.0.1:8765
 - 只需要 Python 3.8+，不依赖第三方库。
 - 也可以用环境变量 `KIMI_API_KEY`、`KIMI_BASE_URL`、`KIMI_MODEL`，或 `--env-file` 指定别处的配置文件。
 - `python3 mentor_server.py --no-ai` 只提供网页、不接 AI。
+- 页面只在 `localhost` 上去找导师服务。如果你把它跑在别的地址上，在网址后面加 `?mentor=1`。
 - 导师的教学规则写在 [`mentor_prompt.md`](mentor_prompt.md)，可以自己改。
 
 ## 修改与打包
