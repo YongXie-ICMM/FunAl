@@ -1274,16 +1274,17 @@ FunAl.data = {
     const seen = new Map();      // value -> times this question has appeared
     const listeners = [];
     let opened = 0, dupCount = 0, computed = 0, lookups = 0, cards = 0;
+    const computedSet = new Set();   // which distinct questions were actually worked out
     const pending = [];   // nodes the learner has not opened yet
 
     function hudRender() {
       if (!o.hud) return;
       hud.innerHTML = '';
       const add = (label, v, cls) => { const d = el('div', cls || '', `${esc(label)} <b>${typeof v === 'number' ? v.toLocaleString('en-US') : v}</b>`); hud.appendChild(d); };
-      if (o.hudLabels) { o.hudLabels(add, { opened, dupCount, computed, lookups, cards }); return; }
+      if (o.hudLabels) { o.hudLabels(add, { opened, dupCount, computed, lookups, cards, distinctComputed: computedSet.size }); return; }
       add('屏幕上的问题卡：', cards);
       if (!o.memo) add('其中是重复的：', dupCount);
-      else { add('真正算过：', computed); add('直接抄账本：', lookups); }
+      else { add('真正算过的小题：', computedSet.size); add('直接抄账本：', lookups); }
     }
 
     function makeNode(n, depth) {
@@ -1333,6 +1334,7 @@ FunAl.data = {
         });
         node.appendChild(kidsWrap);
         computed++;
+        computedSet.add(n);
         hudRender();
         settle(state);
         listeners.forEach((f) => f({ kind: 'open', n, api }));
@@ -1359,7 +1361,7 @@ FunAl.data = {
     const api = {
       el: root, rootState,
       on(fn) { listeners.push(fn); return api; },
-      get stats() { return { opened, dupCount, computed, lookups, cards, distinct: seen.size }; },
+      get stats() { return { opened, dupCount, computed, lookups, cards, distinct: seen.size, distinctComputed: computedSet.size }; },
       /* Open every remaining card at once, for learners who have felt enough of the tedium. */
       expandAll(limit) {
         let guard = limit || 4000;
@@ -1977,6 +1979,89 @@ FunAl.register({
     await t.say('那修起来就很自然了：**算过的，记下来。**');
     await t.say('下一屏，你给这台机器一个账本。');
 
+    t.done();
+  },
+});
+
+
+// ---- src/levels/06_memo.js ----
+FunAl.register({
+  id: 'memo',
+  title: '给它一个账本',
+  goal: '学习者亲手用账本重跑一遍，看到真正需要算的小题只有几道，并理解「记下来」为什么可信。',
+  minutes: 3,
+  async run(t) {
+    const D = FunAl.data.ways;
+
+    await t.say('同一台机器，同一道题。这次桌上多了一个**账本**。');
+    t.note('新规矩（只加了一条）', '每碰到一道小题，**先翻账本**：\n\n· 账本上有 → 直接抄，不再往下拆。\n· 账本上没有 → 拆开算，算出来**记进账本**。');
+
+    await t.ask.choice('先想一个问题：账本上的旧答案，凭什么可以直接拿来用？万一它过期了呢？', [
+      '不会过期。「到第 2 级有几种走法」这道题的答案是固定的，问一百遍都是 2。',
+      '有可能过期，所以最好还是重算一遍保险。',
+    ], {
+      correct: 0,
+      feedback: {
+        1: '想想这道小题到底问的是什么：「从地面走到第 2 级，一共有几种走法」。这句话里没有任何会变的东西——楼梯没变，规则没变。答案昨天是 2，今天还是 2。**会变的答案才需要重算，这个不会。**',
+      },
+      explainRight: '对。**同一道题，答案不会变**，所以抄旧答案是安全的。这一点后面还会用到。',
+      hints: ['把那道小题完整念一遍：「从地面走到第 2 级有几种走法」。这句话里有什么东西会变吗？'],
+    });
+
+    await t.ask.predict('那么，为了算出到第 6 级，这次它真正需要**算**的小题有几道？', [
+      '还是二十几道', '十来道', '五六道',
+    ]);
+
+    await t.say('自己点。绿色的卡片表示「账本上有，直接抄的」。');
+
+    const side = t.canvas();
+    side.classList.add('w-side');
+    const treeBox = t.el('div', 'w-side-main');
+    const bookBox = t.el('div', 'w-side-aside');
+    side.append(treeBox, bookBox);
+    const book = FunAl.widgets.notebook(bookBox, { title: '账本', rows: [2, 3, 4, 5, 6], label: (k) => `到第 ${k} 级` });
+    const tr = FunAl.widgets.tree(treeBox, { root: 6, memo: true, book, label: (n) => `到第 ${n} 级？` });
+
+    t.hints(['点蓝色卡片拆开算，点绿色卡片直接抄账本。', '每算出一个答案，右边的账本就会自己记上。']);
+    await t.waitFor((resolve) => tr.on((ev) => { if (ev.kind === 'solved' && ev.n === 6) setTimeout(() => resolve(true), 400); }));
+    t.clearHints();
+
+    const st = tr.stats;
+    t.learnerSays(`算完了，答案还是 ${tr.value}`);
+    t.right(`真正算过的小题：**${st.distinctComputed} 道**。屏幕上一共 **${st.cards} 张**卡片，上一屏是 **${D.naive[6].cards} 张**。`);
+
+    await t.say('注意看那 5 道题是哪几道：**到第 2、3、4、5、6 级**。就是账本上那 5 行。');
+
+    t.note('一个容易被追问的细节', `「真正算过的小题有几道」这个数字，**跟你点卡片的顺序没关系**——不管你先点哪一边，需要算的小题永远是那 5 道，因为不同的小题就只有那么多。\n\n（「抄了几次」倒是会随顺序变，所以我们不拿它当数据。）`);
+
+    await t.say(`楼梯高了也一样。30 级楼梯：没有账本要问 **${D.naive[30].cards.toLocaleString('en-US')}** 张卡片，有账本只需要算 **${D.memoComputes[30]}** 道小题。`);
+
+    t.note('给这件事起个名字', '**把算过的答案记下来，下次直接用，这叫「记忆化」。**\n\n就是备忘录的意思。你刚才做的就是它，不多不少。');
+
+    await t.say('现在停下来比较一下两屏。');
+    await t.ask.choice('加了账本之后，**那条规律**变了吗？', [
+      '没变。规律一模一样，只是不再重复算了。',
+      '变了，现在是一条新规律。',
+    ], {
+      correct: 0,
+      feedback: { 1: '把两屏的卡片对照看看：拆的方式完全一样，都是「到第 k 级 = 到第 k−1 级 + 到第 k−2 级」。变的只是**碰到算过的题时不再往下拆**。' },
+      explainRight: '对。**想法没变，只是不再做重复劳动。**',
+    });
+
+    await t.say('最后一件事。你有没有注意到，账本是**从小到大**填满的？先有到第 2 级，才有第 3 级，最后才轮到第 6 级。');
+    await t.ask.choice('既然答案总是从小往大写进账本，那……', [
+      '那干脆一开始就从小往大算，连问都不用问。',
+      '不行，必须先从大的问下来才知道要算哪些。',
+    ], {
+      correct: 0,
+      feedback: { 1: '这一道题里，你其实一开始就知道要算哪些：从第 2 级到第 6 级，一个不落。既然都要算，那从哪头开始都行。' },
+      explainRight: '对。而**这正是你在「第 0 级填几」那一屏已经做过的事**——你从左往右把一排格子填满了。',
+      hints: ['回想一下你填那一排格子的时候，是从哪一头开始的？'],
+    });
+
+    t.note('两条路，同一本账', '**从上往下问 + 账本**（刚才这屏）和**从下往上填表**（填格子那屏），算出来的是同一批数字。\n\n那平时用哪个？\n\n· **填表**更省事，不用记账本、不用递归，代价是**每一格都得填**。\n· **从上往下问 + 账本**在「格子很多、但真正用得到的很少」的时候更划算——用不到的它压根不会去算。\n\n这门课后面走**填表**这条路，因为它看得见、摸得着。');
+
+    await t.say('到这里，爬楼梯这道题你已经彻底做完了。下一屏，我们给你做过的每一件事起个名字——然后换一道**完全不同**的题试试。');
     t.done();
   },
 });

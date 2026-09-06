@@ -372,16 +372,17 @@
     const seen = new Map();      // value -> times this question has appeared
     const listeners = [];
     let opened = 0, dupCount = 0, computed = 0, lookups = 0, cards = 0;
+    const computedSet = new Set();   // which distinct questions were actually worked out
     const pending = [];   // nodes the learner has not opened yet
 
     function hudRender() {
       if (!o.hud) return;
       hud.innerHTML = '';
       const add = (label, v, cls) => { const d = el('div', cls || '', `${esc(label)} <b>${typeof v === 'number' ? v.toLocaleString('en-US') : v}</b>`); hud.appendChild(d); };
-      if (o.hudLabels) { o.hudLabels(add, { opened, dupCount, computed, lookups, cards }); return; }
+      if (o.hudLabels) { o.hudLabels(add, { opened, dupCount, computed, lookups, cards, distinctComputed: computedSet.size }); return; }
       add('屏幕上的问题卡：', cards);
       if (!o.memo) add('其中是重复的：', dupCount);
-      else { add('真正算过：', computed); add('直接抄账本：', lookups); }
+      else { add('真正算过的小题：', computedSet.size); add('直接抄账本：', lookups); }
     }
 
     function makeNode(n, depth) {
@@ -431,6 +432,7 @@
         });
         node.appendChild(kidsWrap);
         computed++;
+        computedSet.add(n);
         hudRender();
         settle(state);
         listeners.forEach((f) => f({ kind: 'open', n, api }));
@@ -457,7 +459,7 @@
     const api = {
       el: root, rootState,
       on(fn) { listeners.push(fn); return api; },
-      get stats() { return { opened, dupCount, computed, lookups, cards, distinct: seen.size }; },
+      get stats() { return { opened, dupCount, computed, lookups, cards, distinct: seen.size, distinctComputed: computedSet.size }; },
       /* Open every remaining card at once, for learners who have felt enough of the tedium. */
       expandAll(limit) {
         let guard = limit || 4000;
