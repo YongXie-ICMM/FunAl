@@ -39,6 +39,7 @@
   .w-path .chip { background: var(--paper); border: 1.5px solid var(--line); border-radius: 999px; padding: 1px 10px; font-weight: 600; color: var(--ink); }
   .w-path .chip.two { border-color: var(--accent); }
   .w-cost { font-weight: 700; color: var(--warn); }
+  .w-extra { font-weight: 700; color: #c0392b; }
 
   .w-cells { position: relative; }
   .w-cells-title { font-weight: 600; margin-bottom: 8px; }
@@ -188,7 +189,13 @@
             pathRow.appendChild(el('span', 'chip' + (k === 2 ? ' two' : ''), `+${k}`));
             if (idx < api.path.length - 1) pathRow.appendChild(el('span', '', '·'));
           });
-          if (o.tolls && o.showCost) pathRow.appendChild(el('span', 'w-cost', `　已付 ${api.cost} 元`));
+          if (o.tolls && o.showCost) {
+            pathRow.appendChild(el('span', 'w-cost', `　过路费 ${api.cost} 元`));
+            if (o.extraCost) {
+              pathRow.appendChild(el('span', 'w-extra', api.extra ? `　+ 罚款 ${api.extra} 元` : '　+ 罚款 0 元'));
+              pathRow.appendChild(el('span', 'w-cost', `　= ${api.cost + api.extra} 元`));
+            }
+          }
         } else {
           pathRow.appendChild(el('span', 'muted small', o.emptyHint || '还没走。'));
         }
@@ -205,12 +212,13 @@
         api.path.push(k);
         api.visited.push(api.pos);
         if (o.tolls) api.cost += (o.tolls[api.pos] || 0);
+        if (o.extraCost) api.extra = o.extraCost(api.path);
         api.render();
-        const ev = { pos: api.pos, path: api.path.slice(), visited: api.visited.slice(), cost: api.cost, done: api.pos === o.n };
+        const ev = { pos: api.pos, path: api.path.slice(), visited: api.visited.slice(), cost: api.cost, extra: api.extra, total: api.cost + api.extra, done: api.pos === o.n };
         listeners.forEach((fn) => fn(ev));
         return true;
       },
-      reset() { api.pos = o.start; api.path = []; api.visited = [o.start]; api.cost = 0; api.render(); listeners.forEach((fn) => fn({ pos: api.pos, path: [], visited: [o.start], cost: 0, done: false, reset: true })); },
+      reset() { api.pos = o.start; api.path = []; api.visited = [o.start]; api.cost = 0; api.extra = 0; api.render(); listeners.forEach((fn) => fn({ pos: api.pos, path: [], visited: [o.start], cost: 0, done: false, reset: true })); },
       setCurrent(i) { api.pos = i; api.render(); },
       enable(v) { api.enabled = v !== false; api.render(); },
       mark(i, cls) { if (steps[i]) steps[i].classList.add(cls); },
@@ -227,6 +235,7 @@
       showPath(path) { // display a given route on the stairs without moving the learner
         api.reset(); api.enabled = false;
         path.forEach((k) => { api.pos += k; api.path.push(k); api.visited.push(api.pos); if (o.tolls) api.cost += (o.tolls[api.pos] || 0); });
+        if (o.extraCost) api.extra = o.extraCost(api.path);
         api.render();
       },
     };
