@@ -53,6 +53,9 @@
   .w-cell .w-cell-val.good { border-color: var(--ok); background: var(--ok-soft); }
   .w-cell .w-cell-val.gold { border-color: #c9a227; background: #fff7d6; }
   .w-cell .w-cell-val.src { border-color: var(--accent); background: var(--accent-soft); }
+  .w-cell .w-cell-val.pick-me { cursor: pointer; }
+  .w-cell .w-cell-val.pick-me:hover { border-color: var(--accent); background: var(--accent-soft); }
+  .w-cell .w-cell-val.bad-flash { border-color: var(--warn); background: var(--warn-soft); }
   .w-cell .w-cell-val input { width: 100%; height: 100%; min-height: 50px; border: 0; background: transparent; text-align: center; font: inherit; font-size: 1.25rem; font-weight: 700; color: var(--ink); outline: none; }
   .w-cell .w-cell-sub { font-size: .78rem; color: var(--warn); font-weight: 600; min-height: 1.2em; white-space: nowrap; }
   .w-cells svg.w-links { position: absolute; left: 0; top: 0; width: 100%; height: 100%; pointer-events: none; overflow: visible; }
@@ -293,6 +296,13 @@
       },
       markLink(from, cls) { svg.querySelectorAll('path').forEach((p) => { if (Number(p.dataset.from) === from) p.classList.add(cls); }); },
       clearLinks() { svg.innerHTML = ''; },
+      /* Let the learner click cells; pass null to switch it off. */
+      pickable(fn) {
+        items.forEach((it, i) => {
+          it.v.classList.toggle('pick-me', !!fn);
+          it.v.onclick = fn ? () => fn(i, it) : null;
+        });
+      },
       /* Loop until the learner types the right integer into cell i. */
       fill(i, opts2) {
         const f = Object.assign({ answer: null, onWrong: null, onRight: null, button: '填上' }, opts2);

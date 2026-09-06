@@ -14,15 +14,27 @@ FunAl.data = {
     memoComputes: { 4: 3, 6: 5, 8: 7, 10: 9, 20: 19, 30: 29 },
   },
 
-  /* ---- problem 2: cheapest way up a toll staircase (6 stairs, ground is free) ---- */
+  /* ---- problem 2: cheapest way up a toll staircase (6 stairs, the ground is free) ----
+   * Chosen so three different intuitions all fail:
+   *   walking greedily (18), dodging the priciest stair (16), and the table (12).
+   * The cheapest route has to step on the most expensive stair, and it is the only
+   * route that costs 12. The answer avoids 5, 8, 13, 21 so it cannot be mistaken for
+   * one of the counting answers. */
   toll: {
-    tolls: [0, 1, 8, 1, 1, 5, 6],          // tolls[i] = 踩上第 i 级要付的钱
-    best: [0, 1, 8, 2, 3, 7, 9],           // best[i] = 到第 i 级最少花多少
-    from: [null, 0, 0, 1, 3, 3, 4],        // from[i] = 最省时是从第几级来的（第 2 级是从地面一步跨 2 级上来的）
-    bestPath: [0, 1, 3, 4, 6],             // 唯一的最省路线，共 9 元
-    bestCost: 9,
-    greedy: { path: [0, 1, 3, 4, 5, 6], cost: 14,
-      trap: '在第 4 级时，第 5 级要 5 元、第 6 级要 6 元，挑了眼前便宜的 5 元，结果还得再付 6 元，一共 11 元；直接跳到第 6 级只要 6 元。' },
+    tolls: [0, 1, 7, 8, 7, 1, 2],          // tolls[i] = 踩上第 i 级要付的钱
+    pricey: 3,                             // 全场最贵的那一级
+    best: [0, 1, 7, 9, 14, 10, 12],        // best[i] = 到第 i 级最少花多少
+    from: [null, 0, 0, 1, 2, 3, 5],        // from[i] = 最省时是从第几级来的
+    bestPath: [0, 1, 3, 5, 6],
+    bestCost: 12,
+    allCosts: [12, 16, 17, 17, 18, 18, 18, 19, 19, 24, 25, 25, 26],   // 全部 13 条路，从便宜到贵
+    greedy: { path: [0, 1, 2, 4, 5, 6], cost: 18 },                   // 每步挑眼前便宜的
+    dodge: { path: [0, 2, 4, 6], cost: 16 },                          // 躲开最贵的第 3 级
+    /* the route the "swap the first half" argument uses */
+    swap: { path: [0, 2, 4, 5, 6], cost: 17, headTo5: 15, bestHeadTo5: 10, tail: 2, after: 12 },
+    /* a second set of prices where two sources tie, so backtracking has two answers */
+    tie: { tolls: [0, 2, 3, 2, 3, 2, 1], best: [0, 2, 3, 4, 6, 6, 7], bestCost: 7,
+           paths: [[0, 1, 3, 5, 6], [0, 2, 4, 6]] },
   },
 
   /* ---- problem 3 (transfer): fewest coins to make 6 with 1, 3, 4 ---- */
@@ -35,19 +47,36 @@ FunAl.data = {
     unreachable: { values: [3, 4], target: 5, table: [0, null, null, 1, 1, null, 2, 2, 2] },  // null = 凑不出
   },
 
-  /* ---- the counterexample: when one number per cell is not enough ---- */
+  /* ---- the counterexample: when one number per cell is not enough ----
+   * Same staircase, one added rule: a 3 fine for two 2-steps in a row.
+   * A table that remembers only which stair you are on says 12, and no route
+   * costs 12 - the cheapest really costs 15. Remembering one more thing (was my
+   * last step a 2?) turns the single row of cells into two rows, and those give 15. */
   broken: {
-    tolls: [0, 9, 1, 9, 1], penalty: 10, n: 4,
-    rule: '连着走两次 2 级要罚 10 元',
-    naiveTable: [0, 9, 1, 10, 2],          // 只记「我在第几级」算出来的表
-    naiveClaim: 2,
-    realBest: 11, realPath: [1, 1, 2],
-    allRoutes: [                            // 到第 4 级的全部 5 条走法，含罚款
-      { steps: [1, 1, 2], toll: 11, penalty: 0, total: 11 },
-      { steps: [2, 1, 1], toll: 11, penalty: 0, total: 11 },
-      { steps: [2, 2], toll: 2, penalty: 10, total: 12 },
-      { steps: [1, 2, 1], toll: 19, penalty: 0, total: 19 },
-      { steps: [1, 1, 1, 1], toll: 20, penalty: 0, total: 20 },
+    penalty: 3,
+    rule: '连着走两次 2 级，罚 3 元',
+    oldTableSays: 12,
+    byOne: [null, 1, 8, 15, 16, 16, 15],   // 到第 k 级、且最后一步是走 1 级上来的，最少花多少
+    byTwo: [null, null, 7, 9, 15, 13, 18], // 到第 k 级、且最后一步是跨 2 级上来的
+    realBest: 15,
+    realPath: [0, 1, 3, 5, 6],
+    realSteps: [1, 2, 2, 1],
+    realBreakdown: { toll: 12, penalty: 3 },
+    /* every route to stair 6, with the fine included, cheapest first */
+    allRoutes: [
+      { steps: [1, 2, 2, 1], toll: 12, penalty: 3, total: 15 },
+      { steps: [1, 1, 2, 1, 1], toll: 18, penalty: 0, total: 18 },
+      { steps: [1, 2, 1, 2], toll: 18, penalty: 0, total: 18 },
+      { steps: [2, 1, 2, 1], toll: 18, penalty: 0, total: 18 },
+      { steps: [1, 1, 1, 2, 1], toll: 19, penalty: 0, total: 19 },
+      { steps: [1, 2, 1, 1, 1], toll: 19, penalty: 0, total: 19 },
+      { steps: [1, 1, 2, 2], toll: 17, penalty: 3, total: 20 },
+      { steps: [2, 2, 1, 1], toll: 17, penalty: 3, total: 20 },
+      { steps: [2, 2, 2], toll: 16, penalty: 6, total: 22 },
+      { steps: [2, 1, 1, 2], toll: 24, penalty: 0, total: 24 },
+      { steps: [1, 1, 1, 1, 2], toll: 25, penalty: 0, total: 25 },
+      { steps: [2, 1, 1, 1, 1], toll: 25, penalty: 0, total: 25 },
+      { steps: [1, 1, 1, 1, 1, 1], toll: 26, penalty: 0, total: 26 },
     ],
   },
 };

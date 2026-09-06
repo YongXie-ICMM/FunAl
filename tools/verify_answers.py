@@ -168,14 +168,48 @@ def main():
     check("最省路线 toll.bestPath", t["bestPath"], path)
     check("最省花费 toll.bestCost", t["bestCost"], dp[-1])
     check("  填表结果 = 穷举结果", dp[-1], brute)
+    n = len(t["tolls"]) - 1
+    def route_cost(r):
+        pos, c, p = 0, 0, [0]
+        for s in r:
+            pos += s
+            c += t["tolls"][pos]
+            p.append(pos)
+        return c, p
+    all_costs = sorted(route_cost(r)[0] for r in routes(n))
+    check("全部 13 条路的花费 toll.allCosts", t["allCosts"], all_costs)
+    check("  最省路线唯一（倒推只有一个答案）", all_costs.count(dp[-1]), 1)
+    check("  最贵的台阶就是 toll.pricey", t["pricey"], t["tolls"].index(max(t["tolls"])))
+    check("  最省路线必须踩上最贵的台阶", t["pricey"] in path, True)
     g, gp = greedy_walk(t["tolls"])
     check("贪心花费 toll.greedy.cost", t["greedy"]["cost"], g)
     check("贪心路线 toll.greedy.path", t["greedy"]["path"], gp)
-    check("  贪心必须比最省贵（否则陷阱不成立）", g > dp[-1], True)
-    n = len(t["tolls"]) - 1
-    all_best = [r for r in routes(n) if sum(t["tolls"][p] for p in
-                [sum(r[: i + 1]) for i in range(len(r))]) == dp[-1]]
-    check("  最省路线唯一（倒推时不会有两个答案）", len(all_best), 1)
+    check("  贪心必须更贵（否则陷阱不成立）", g > dp[-1], True)
+    dodge = min((route_cost(r) for r in routes(n) if t["pricey"] not in route_cost(r)[1]))
+    check("躲开最贵台阶的最好成绩 toll.dodge", [t["dodge"]["cost"], t["dodge"]["path"]], [dodge[0], dodge[1]])
+    check("  躲开最贵台阶也必须更贵", dodge[0] > dp[-1], True)
+    check("  贪心路线和躲避路线不是同一条", t["greedy"]["path"] != t["dodge"]["path"], True)
+    sw = t["swap"]
+    c_sw, p_sw = route_cost([2, 2, 1, 1])
+    check("换前半段用的那条路 toll.swap.path", sw["path"], p_sw)
+    check("  它的总价 toll.swap.cost", sw["cost"], c_sw)
+    check("  它到第 5 级的前半段花了多少 toll.swap.headTo5", sw["headTo5"], sum(t["tolls"][i] for i in p_sw[1:-1]))
+    check("  到第 5 级最省是多少 toll.swap.bestHeadTo5", sw["bestHeadTo5"], dp[5])
+    check("  换完之后的总价 toll.swap.after", sw["after"], dp[5] + t["tolls"][6])
+    check("  换完之后 = 最省（说明这条论证站得住）", dp[5] + t["tolls"][6], dp[-1])
+    tie = t["tie"]
+    tdp, tsrc, tpath = toll_dp(tie["tolls"])
+    check("平局那组价签的最省表 toll.tie.best", tie["best"], tdp)
+    check("  平局那组的最省花费", tie["bestCost"], tdp[-1])
+    def tie_cost(r):
+        pos, c, p = 0, 0, [0]
+        for s in r:
+            pos += s
+            c += tie["tolls"][pos]
+            p.append(pos)
+        return c, p
+    tie_best = sorted((tie_cost(r)[1] for r in routes(len(tie["tolls"]) - 1) if tie_cost(r)[0] == tdp[-1]))
+    check("  达到最省的路线恰好有两条 toll.tie.paths", sorted(tie["paths"]), tie_best)
 
     print("\n3. 硬币（迁移题）")
     c = d["coins"]
@@ -198,20 +232,34 @@ def main():
           u["table"], [None if x == INF else x for x in udp[: len(u["table"])]])
     check(f"  凑 {u['target']} 元确实凑不出", udp[u["target"]], INF)
 
-    print("\n4. 反例：格子里只记一个数不够")
+    print("\n4. 反例：格子里只记一个数不够（同一段楼梯 + 罚款）")
     b = d["broken"]
-    rs = broken_routes(b["tolls"], b["penalty"], b["n"])
-    naive = [0] * (b["n"] + 1)
-    naive[1] = b["tolls"][1]
-    for i in range(2, b["n"] + 1):
-        naive[i] = b["tolls"][i] + min(naive[i - 1], naive[i - 2])
-    check("只记级数算出的表 broken.naiveTable", b["naiveTable"], naive)
-    check("表宣称的最省 broken.naiveClaim", b["naiveClaim"], naive[b["n"]])
+    tolls = t["tolls"]
+    pen = b["penalty"]
+    n = len(tolls) - 1
+    rs = broken_routes(tolls, pen, n)
+    check("全部走法（含罚款）broken.allRoutes", b["allRoutes"], rs)
     check("真实最省 broken.realBest", b["realBest"], rs[0]["total"])
-    check("真实最省走法 broken.realPath", b["realPath"], rs[0]["steps"])
-    check("全部走法 broken.allRoutes", b["allRoutes"], rs)
-    check("  表算出的价钱必须低于任何真实走法（这才叫算错）", naive[b["n"]] < rs[0]["total"], True)
-    check("  没有任何一条走法花得起表说的那个价", [r for r in rs if r["total"] == naive[b["n"]]], [])
+    check("真实最省的走法 broken.realSteps", b["realSteps"], rs[0]["steps"])
+    check("  它的过路费与罚款拆分", [b["realBreakdown"]["toll"], b["realBreakdown"]["penalty"]],
+          [rs[0]["toll"], rs[0]["penalty"]])
+    check("只记级数的旧表说多少 broken.oldTableSays", b["oldTableSays"], dp[-1])
+    check("  旧表的数低于任何真实走法（这才叫算错）", dp[-1] < rs[0]["total"], True)
+    check("  没有任何一条走法花得起旧表说的那个价", [r for r in rs if r["total"] == dp[-1]], [])
+    # two rows: last step was a 1, or last step was a 2
+    INFN = float("inf")
+    one = [INFN] * (n + 1)
+    two = [INFN] * (n + 1)
+    one[1] = tolls[1]
+    two[2] = tolls[2]
+    one[2] = tolls[2] + one[1]
+    for k in range(3, n + 1):
+        one[k] = tolls[k] + min(one[k - 1], two[k - 1])
+        two[k] = tolls[k] + min(one[k - 2], two[k - 2] + pen)
+    conv = lambda row: [None if x == INFN else x for x in row]
+    check("两行表 · 走 1 级上来 broken.byOne", b["byOne"], conv(one))
+    check("两行表 · 跨 2 级上来 broken.byTwo", b["byTwo"], conv(two))
+    check("  两行表算出的答案 = 穷举答案", min(one[n], two[n]), rs[0]["total"])
 
     print(f"\n{len(ok)} 项通过，{len(bad)} 项失败。")
     if bad:

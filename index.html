@@ -860,15 +860,27 @@ FunAl.data = {
     memoComputes: { 4: 3, 6: 5, 8: 7, 10: 9, 20: 19, 30: 29 },
   },
 
-  /* ---- problem 2: cheapest way up a toll staircase (6 stairs, ground is free) ---- */
+  /* ---- problem 2: cheapest way up a toll staircase (6 stairs, the ground is free) ----
+   * Chosen so three different intuitions all fail:
+   *   walking greedily (18), dodging the priciest stair (16), and the table (12).
+   * The cheapest route has to step on the most expensive stair, and it is the only
+   * route that costs 12. The answer avoids 5, 8, 13, 21 so it cannot be mistaken for
+   * one of the counting answers. */
   toll: {
-    tolls: [0, 1, 8, 1, 1, 5, 6],          // tolls[i] = 踩上第 i 级要付的钱
-    best: [0, 1, 8, 2, 3, 7, 9],           // best[i] = 到第 i 级最少花多少
-    from: [null, 0, 0, 1, 3, 3, 4],        // from[i] = 最省时是从第几级来的（第 2 级是从地面一步跨 2 级上来的）
-    bestPath: [0, 1, 3, 4, 6],             // 唯一的最省路线，共 9 元
-    bestCost: 9,
-    greedy: { path: [0, 1, 3, 4, 5, 6], cost: 14,
-      trap: '在第 4 级时，第 5 级要 5 元、第 6 级要 6 元，挑了眼前便宜的 5 元，结果还得再付 6 元，一共 11 元；直接跳到第 6 级只要 6 元。' },
+    tolls: [0, 1, 7, 8, 7, 1, 2],          // tolls[i] = 踩上第 i 级要付的钱
+    pricey: 3,                             // 全场最贵的那一级
+    best: [0, 1, 7, 9, 14, 10, 12],        // best[i] = 到第 i 级最少花多少
+    from: [null, 0, 0, 1, 2, 3, 5],        // from[i] = 最省时是从第几级来的
+    bestPath: [0, 1, 3, 5, 6],
+    bestCost: 12,
+    allCosts: [12, 16, 17, 17, 18, 18, 18, 19, 19, 24, 25, 25, 26],   // 全部 13 条路，从便宜到贵
+    greedy: { path: [0, 1, 2, 4, 5, 6], cost: 18 },                   // 每步挑眼前便宜的
+    dodge: { path: [0, 2, 4, 6], cost: 16 },                          // 躲开最贵的第 3 级
+    /* the route the "swap the first half" argument uses */
+    swap: { path: [0, 2, 4, 5, 6], cost: 17, headTo5: 15, bestHeadTo5: 10, tail: 2, after: 12 },
+    /* a second set of prices where two sources tie, so backtracking has two answers */
+    tie: { tolls: [0, 2, 3, 2, 3, 2, 1], best: [0, 2, 3, 4, 6, 6, 7], bestCost: 7,
+           paths: [[0, 1, 3, 5, 6], [0, 2, 4, 6]] },
   },
 
   /* ---- problem 3 (transfer): fewest coins to make 6 with 1, 3, 4 ---- */
@@ -881,19 +893,36 @@ FunAl.data = {
     unreachable: { values: [3, 4], target: 5, table: [0, null, null, 1, 1, null, 2, 2, 2] },  // null = 凑不出
   },
 
-  /* ---- the counterexample: when one number per cell is not enough ---- */
+  /* ---- the counterexample: when one number per cell is not enough ----
+   * Same staircase, one added rule: a 3 fine for two 2-steps in a row.
+   * A table that remembers only which stair you are on says 12, and no route
+   * costs 12 - the cheapest really costs 15. Remembering one more thing (was my
+   * last step a 2?) turns the single row of cells into two rows, and those give 15. */
   broken: {
-    tolls: [0, 9, 1, 9, 1], penalty: 10, n: 4,
-    rule: '连着走两次 2 级要罚 10 元',
-    naiveTable: [0, 9, 1, 10, 2],          // 只记「我在第几级」算出来的表
-    naiveClaim: 2,
-    realBest: 11, realPath: [1, 1, 2],
-    allRoutes: [                            // 到第 4 级的全部 5 条走法，含罚款
-      { steps: [1, 1, 2], toll: 11, penalty: 0, total: 11 },
-      { steps: [2, 1, 1], toll: 11, penalty: 0, total: 11 },
-      { steps: [2, 2], toll: 2, penalty: 10, total: 12 },
-      { steps: [1, 2, 1], toll: 19, penalty: 0, total: 19 },
-      { steps: [1, 1, 1, 1], toll: 20, penalty: 0, total: 20 },
+    penalty: 3,
+    rule: '连着走两次 2 级，罚 3 元',
+    oldTableSays: 12,
+    byOne: [null, 1, 8, 15, 16, 16, 15],   // 到第 k 级、且最后一步是走 1 级上来的，最少花多少
+    byTwo: [null, null, 7, 9, 15, 13, 18], // 到第 k 级、且最后一步是跨 2 级上来的
+    realBest: 15,
+    realPath: [0, 1, 3, 5, 6],
+    realSteps: [1, 2, 2, 1],
+    realBreakdown: { toll: 12, penalty: 3 },
+    /* every route to stair 6, with the fine included, cheapest first */
+    allRoutes: [
+      { steps: [1, 2, 2, 1], toll: 12, penalty: 3, total: 15 },
+      { steps: [1, 1, 2, 1, 1], toll: 18, penalty: 0, total: 18 },
+      { steps: [1, 2, 1, 2], toll: 18, penalty: 0, total: 18 },
+      { steps: [2, 1, 2, 1], toll: 18, penalty: 0, total: 18 },
+      { steps: [1, 1, 1, 2, 1], toll: 19, penalty: 0, total: 19 },
+      { steps: [1, 2, 1, 1, 1], toll: 19, penalty: 0, total: 19 },
+      { steps: [1, 1, 2, 2], toll: 17, penalty: 3, total: 20 },
+      { steps: [2, 2, 1, 1], toll: 17, penalty: 3, total: 20 },
+      { steps: [2, 2, 2], toll: 16, penalty: 6, total: 22 },
+      { steps: [2, 1, 1, 2], toll: 24, penalty: 0, total: 24 },
+      { steps: [1, 1, 1, 1, 2], toll: 25, penalty: 0, total: 25 },
+      { steps: [2, 1, 1, 1, 1], toll: 25, penalty: 0, total: 25 },
+      { steps: [1, 1, 1, 1, 1, 1], toll: 26, penalty: 0, total: 26 },
     ],
   },
 };
@@ -955,6 +984,9 @@ FunAl.data = {
   .w-cell .w-cell-val.good { border-color: var(--ok); background: var(--ok-soft); }
   .w-cell .w-cell-val.gold { border-color: #c9a227; background: #fff7d6; }
   .w-cell .w-cell-val.src { border-color: var(--accent); background: var(--accent-soft); }
+  .w-cell .w-cell-val.pick-me { cursor: pointer; }
+  .w-cell .w-cell-val.pick-me:hover { border-color: var(--accent); background: var(--accent-soft); }
+  .w-cell .w-cell-val.bad-flash { border-color: var(--warn); background: var(--warn-soft); }
   .w-cell .w-cell-val input { width: 100%; height: 100%; min-height: 50px; border: 0; background: transparent; text-align: center; font: inherit; font-size: 1.25rem; font-weight: 700; color: var(--ink); outline: none; }
   .w-cell .w-cell-sub { font-size: .78rem; color: var(--warn); font-weight: 600; min-height: 1.2em; white-space: nowrap; }
   .w-cells svg.w-links { position: absolute; left: 0; top: 0; width: 100%; height: 100%; pointer-events: none; overflow: visible; }
@@ -1195,6 +1227,13 @@ FunAl.data = {
       },
       markLink(from, cls) { svg.querySelectorAll('path').forEach((p) => { if (Number(p.dataset.from) === from) p.classList.add(cls); }); },
       clearLinks() { svg.innerHTML = ''; },
+      /* Let the learner click cells; pass null to switch it off. */
+      pickable(fn) {
+        items.forEach((it, i) => {
+          it.v.classList.toggle('pick-me', !!fn);
+          it.v.onclick = fn ? () => fn(i, it) : null;
+        });
+      },
       /* Loop until the learner types the right integer into cell i. */
       fill(i, opts2) {
         const f = Object.assign({ answer: null, onWrong: null, onRight: null, button: '填上' }, opts2);
@@ -2062,6 +2101,106 @@ FunAl.register({
     t.note('两条路，同一本账', '**从上往下问 + 账本**（刚才这屏）和**从下往上填表**（填格子那屏），算出来的是同一批数字。\n\n那平时用哪个？\n\n· **填表**更省事，不用记账本、不用递归，代价是**每一格都得填**。\n· **从上往下问 + 账本**在「格子很多、但真正用得到的很少」的时候更划算——用不到的它压根不会去算。\n\n这门课后面走**填表**这条路，因为它看得见、摸得着。');
 
     await t.say('到这里，爬楼梯这道题你已经彻底做完了。下一屏，我们给你做过的每一件事起个名字——然后换一道**完全不同**的题试试。');
+    t.done();
+  },
+});
+
+
+// ---- src/levels/07_naming.js ----
+FunAl.register({
+  id: 'naming',
+  title: '给做过的事起名字',
+  goal: '把学习者已经做过的五件事命名，解释符号怎么读，并说清「动态规划」这个名字的来历。',
+  minutes: 3,
+  async run(t) {
+    const D = FunAl.data.ways;
+
+    await t.say('到现在为止，我一个术语都没用。因为术语是**给做过的事贴标签**，事没做过，标签就只是四个字。');
+    await t.say('你已经做完了。现在贴标签。');
+
+    await t.ask.match('把左边的名字，连到右边你真正做过的那件事：', [
+      { term: '**状态**', did: '每个格子代表的那道小题：「到第 k 级有几种走法」', explain: '对。**状态**就是「我在算哪一道小题」。' },
+      { term: '**状态转移**', did: '一格是怎么由左边两格算出来的：到第 k 级 = 到第 k−1 级 + 到第 k−2 级', explain: '对。**转移**就是那条规律：大格子怎么从小格子来。' },
+      { term: '**边界**', did: '不用算就知道答案的那一两格，比如地面那格 = 1', explain: '对。**边界**就是起步格。' },
+      { term: '**记忆化**', did: '算过的答案记进账本，下次碰到直接抄', explain: '对。**记忆化**就是那个账本。' },
+      { term: '**递推（填表）**', did: '从最小的格子开始，从左往右把一整排格子填满', explain: '对。**递推**就是从小往大填。' },
+    ], {
+      rightOrder: [2, 4, 0, 3, 1],
+      feedback: (term, did) => `「${term.replace(/\*/g, '')}」说的不是这件事。先看右边这句话描述的是你在哪一屏做的动作，再想哪个名字对得上。`,
+      hints: [
+        '先挑你最有把握的一个连上，剩下的会好办很多。',
+        '「边界」和「记忆化」这两个最好认：一个是起步格，一个是账本。',
+      ],
+    });
+
+    await t.say('五个词，五件你亲手做过的事。**没有一个是新东西。**');
+
+    await t.ask.choice('顺带解释一个奇怪的词：为什么把「我在算哪道小题」叫作「**状态**」？', [
+      '因为它说的是你此刻的处境。在这道题里，你的处境只有一件事：你站在第几级。',
+      '因为它会变来变去，所以叫状态。',
+    ], {
+      correct: 0,
+      feedback: { 1: '变来变去的东西多了去了。「状态」这个词讲究的是**处境**：站在第 4 级的你，和站在第 5 级的你，处境不一样，往后的走法数也不一样。' },
+      explainRight: '对。**状态 = 你此刻的处境。** 在这道题里，处境只用一个数字就说清了：你在第几级。\n\n记住这句话，它在后面会变得非常关键。',
+      hints: ['把「状态」两个字换成「处境」再读一遍那句话。'],
+    });
+
+    await t.say('还有一件事得说清楚，不然你看别人写的东西会被吓到：**符号**。');
+
+    const box = t.canvas();
+    const row = FunAl.widgets.cells(box, {
+      n: 6, label: (i) => (i === 0 ? '地面' : `第 ${i} 级`),
+      values: { 0: D.table[0], 1: D.table[1], 2: D.table[2], 3: D.table[3], 4: D.table[4], 5: D.table[5], 6: D.table[6] },
+      title: '你填出来的那排格子',
+    });
+
+    t.note('括号不是乘法', '别人写 **f(4)** 或者 **dp[4]** 的时候，那个括号（或方括号）**不是乘号**。\n\n它就是「第 4 格」的意思。**f(4) 念作「第 4 格里的那个数」。**\n\n`f(4)`、`dp[4]`、「到第 4 级有几种走法」——这三种写法说的是同一个东西。');
+
+    let picked = false;
+    row.pickable((i, it) => {
+      if (picked) return;
+      if (i !== 4) {
+        it.v.classList.add('bad-flash');
+        setTimeout(() => it.v.classList.remove('bad-flash'), 400);
+        t.wrong(`你点的是第 ${i} 格。f(4) 里的 4 就是格子的编号，所以要点第 4 格。`);
+        return;
+      }
+      picked = true;
+      row.pickable(null);
+      row.mark(4, 'good');
+      t.learnerSays('点了第 4 格');
+      t.record({ kind: 'pick', prompt: 'f(4) 是哪一格', answer: '第 4 格', correct: true });
+    });
+    await t.say('那你来指一下：**f(4)** 说的是哪一格？直接点它。');
+    t.hints(['f(4) 里的那个 4，就是格子的编号。']);
+    await t.waitFor((resolve) => { const iv = setInterval(() => { if (picked) { clearInterval(iv); resolve(true); } }, 120); });
+    t.clearHints();
+    t.right(`对，第 4 格，里面写着 **${D.table[4]}**。所以 **f(4) = ${D.table[4]}**。`);
+
+    await t.ask.choice('那你自己推出来的那条规律，用这套写法写出来是哪一个？', [
+      'f(k) = f(k−1) + f(k−2)',
+      'f(k) = f(k−1) × f(k−2)',
+      'f(k) = f(k) + 1',
+    ], {
+      correct: 0,
+      feedback: {
+        1: '你是把两堆路线**摆在一起数总数**，不是配对组合。摆在一起就是相加。',
+        2: '这句话是「第 k 格等于它自己加 1」，那就永远算不出来了。等号右边只能出现**比 k 小**的格子。',
+      },
+      explainRight: '对。**f(k) = f(k−1) + f(k−2)**，读作：「第 k 格里的数，等于第 k−1 格加上第 k−2 格。」\n\n这一行你早就会了，只是现在它换了身衣服。',
+      hints: ['f(k−1) 就是「第 k−1 格」，也就是当前格左边那一格。', '你填格子的时候做的是加法还是乘法？'],
+    });
+
+    await t.say('最后说说「**动态规划**」这四个字。很多人被它吓住，觉得一定是什么高深东西。');
+    await t.say('这名字是 1950 年代一个叫 Richard Bellman 的人起的。当时「规划（programming）」的意思是**排方案、做计划**，跟写程序没关系；「动态」指的是**一步一步分阶段推进**。');
+    await t.say('Bellman 自己后来还写过：他挑这个词，一部分原因是它听起来无害，方便申请经费。');
+
+    t.note('所以别被名字骗了', '**「动态规划」= 把一个大问题按「最后一步」拆成同类的小问题，从小到大一格一格算出来，算过的不重算。**\n\n就这些。你已经做完了。');
+
+    t.aside('给写过代码的人：这排格子长什么样', '刚才那一整屏，写成代码就是三行：\n\n`f[0] = 1`\n`f[1] = 1`\n`对 k 从 2 到 n： f[k] = f[k-1] + f[k-2]`\n\n「从上往下问 + 账本」那一版是递归加缓存，「从下往上填表」这一版是循环加数组。两者算出的数字完全一样。\n\n递归版要小心栈深度；填表版每一格都要填。这就是前面说的取舍。');
+
+    await t.say('爬楼梯到此为止。但这门课真正的目的不是让你会数楼梯。');
+    await t.say('下一屏换一道**完全不一样**的题——那里的加号会变成别的东西。');
     t.done();
   },
 });
