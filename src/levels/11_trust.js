@@ -73,7 +73,19 @@ FunAl.register({
       },
     });
     let seenTotal = null;
-    st2.onStep((ev) => { if (ev.done) { seenTotal = ev.total; setTimeout(() => st2.reset(), 1600); } });
+    st2.onStep((ev) => {
+      if (!ev.done) return;
+      const isTheRoute = ev.visited.join('-') === D.bestPath.join('-');
+      if (!isTheRoute) {
+        t.wrong(ev.extra
+          ? `这条是 ${ev.visited.join('→')}，${ev.cost} 元过路费加 ${ev.extra} 元罚款。不过我要你走的是**老表指的那条**：${D.bestPath.join('→')}，也就是 +1、+2、+2、+1。`
+          : `这条是 ${ev.visited.join('→')}，没有连着跨两次 2 级，所以没被罚。去走**老表指的那条**：${D.bestPath.join('→')}，也就是 +1、+2、+2、+1。`);
+        setTimeout(() => st2.reset(), 1400);
+        return;
+      }
+      seenTotal = ev.total;
+      setTimeout(() => st2.reset(), 1800);
+    });
     t.hints([`走 ${D.bestPath.join('→')} 这条：先 +1，再 +2，再 +2，最后 +1。`, '注意中间连着跨了两次 2 级。']);
     await t.waitFor((resolve) => { const iv = setInterval(() => { if (seenTotal !== null) { clearInterval(iv); resolve(seenTotal); } }, 150); });
     t.clearHints();
@@ -92,6 +104,9 @@ FunAl.register({
 
     const cheap = B.allRoutes.filter((r) => r.total < B.realBest);
     t.note('看清楚发生了什么', `老表说 **${B.oldTableSays} 元**。\n\n可 13 条路里，最便宜的一条要 **${B.realBest} 元**。\n\n花 ${B.oldTableSays} 元的走法有 **${cheap.length + (B.allRoutes.filter((r) => r.total === B.oldTableSays).length)} 条**——一条都没有。\n\n**老表不是漏掉了更好的路，它算出了一个买不到的价钱。**`);
+
+    await t.say(`说句公道话：这次最省的**路线**其实没变，还是 ${D.bestPath.join('→')}，只是价钱从 ${B.oldTableSays} 变成了 ${B.realBest}。`);
+    await t.say('但这不算老表走运。**罚款金额再高一点，最省的路线就会换成另一条。** 一张算出假价钱的表，你没理由相信它指的路是真的。');
 
     await t.ask.choice('为什么这次不灵了？', [
       '因为站在第 5 级的时候，「我是怎么来的」开始影响后面要花多少了——上一步是不是跨了 2 级，决定了下一步会不会被罚。',

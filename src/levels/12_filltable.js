@@ -68,7 +68,8 @@ FunAl.register({
 
     t.right(`表填完了：到第 6 级最省 **${D.bestCost} 元**。跟你自己试出来的一样。`);
 
-    await t.say('但表里只有数字，**没有路线**。那条最省的路到底怎么走？自己倒着找回来。');
+    await t.say('但表里只有数字，**没有路线**。');
+    await t.say('那条最省的路你早就见过了（上一道题揭晓过）。所以这一步的重点**不是找出它**，而是学会**怎么从一张只有数字的表里，把路线挖出来**——换一道题，你手上就只有这张表了。');
     await t.say('从第 6 格开始，一路往回问：**这一格的数，是从哪一格来的？**');
 
     const chain = [];
@@ -112,21 +113,79 @@ FunAl.register({
 
     t.note('怎么从表里找回路线', '表里每一格只写了一个数。想知道路线，就**倒着问**：这一格的数，减掉本级的过路费，等于左边哪一格？那一格就是它的来路。\n\n（写代码的时候，也可以填表时顺手记一下「我挑的是哪一格」，省得倒推。）');
 
-    await t.ask.choice(`最后一个坑：如果倒着问的时候，**左边两格一样小**呢？`, [
-      '那说明有两条一样省的路线，挑哪个都对。',
-      '那说明表填错了。',
-      '那要选左边那一格，规定就是这样。',
+    await t.say('还有一个坑，遇到就会卡住。**换一组价签，你自己撞一次。**');
+
+    const T2 = D.tie;
+    const box2 = t.canvas();
+    const row2 = FunAl.widgets.cells(box2, {
+      n: 6,
+      label: (i) => (i === 0 ? '地面' : `第 ${i} 级`),
+      sub: (i) => (i === 0 ? '免费' : `过路费 ${T2.tolls[i]}`),
+      title: '换一组价签，再填一次',
+      values: { 0: T2.best[0], 1: T2.best[1], 2: T2.best[2], 3: T2.best[3] },
+    });
+    await t.say(`前四格我先填好了。你填**第 4、5、6 格**。`);
+
+    for (let i = 4; i <= 6; i++) {
+      row2.links(i, [i - 1, i - 2], ['+1', '+2']);
+      const a = T2.best[i - 1], bb = T2.best[i - 2];
+      t.hints([`第 ${i - 1} 级是 ${a} 元，第 ${i - 2} 级是 ${bb} 元。`, `挑小的，再加第 ${i} 级的 ${T2.tolls[i]} 元。`]);
+      await row2.fill(i, {
+        answer: T2.best[i],
+        onWrong: (v) => {
+          if (v === a + bb + T2.tolls[i]) t.wrong('又把两个来源加起来了。它们是两条路，你只走一条。');
+          else if (v === Math.min(a, bb)) t.wrong(`挑对了小的（${Math.min(a, bb)}），但还没加第 ${i} 级的 ${T2.tolls[i]} 元。`);
+          else t.wrong(`第 ${i - 1} 级 ${a} 元，第 ${i - 2} 级 ${bb} 元，挑小的，再加 ${T2.tolls[i]} 元。`);
+        },
+      });
+      t.clearHints();
+      await t.pause(700);
+      row2.clearLinks();
+    }
+
+    row2.links(6, [5, 4], ['+1', '+2']);
+    await t.ask.choice(`现在倒着问：第 6 格的 ${T2.best[6]} 元，是从哪一格来的？`, [
+      `第 5 级（${T2.best[5]} 元）`,
+      `第 4 级（${T2.best[4]} 元）`,
+      `两个都行——它们一样小。`,
+    ], {
+      correct: 2,
+      feedback: {
+        0: `第 5 级确实能走通：${T2.best[5]} + ${T2.tolls[6]} = ${T2.best[6]}。但先看一眼第 4 级那格是多少。`,
+        1: `第 4 级也确实能走通：${T2.best[4]} + ${T2.tolls[6]} = ${T2.best[6]}。那第 5 级那格呢？`,
+      },
+      explainRight: `对。第 5 级和第 4 级**都是 ${T2.best[5]} 元**，一样小。`,
+      hints: [`把第 5 格和第 4 格的数字念一遍。`, `${T2.best[5]} 和 ${T2.best[4]}，哪个更小？`],
+    });
+    row2.markLink(5, 'pick'); row2.markLink(4, 'pick');
+
+    await t.ask.choice('那这说明什么？', [
+      `说明有**两条**一样省的路线，都花 ${T2.bestCost} 元。挑哪条都对。`,
+      '说明这张表填错了。',
+      '说明得挑左边那一格，规定就是这样。',
     ], {
       correct: 0,
       feedback: {
-        1: '一样小是很正常的事，不是错。',
+        1: '两个数一样大是很正常的事，不是错。你刚才每一格都是照规则算的。',
         2: '没有这种规定。两条路一样便宜，走哪条都花一样的钱。',
       },
-      explainRight: '对。**格子里的数不会变，变的只是路线有几条。**',
-      hints: ['两个来源一样小，说明从哪边来最后都花一样的钱。'],
+      explainRight: `对。**格子里的数不会变，变的只是路线有几条。**`,
+      hints: ['两个来源一样小，说明从哪边来，最后都花一样的钱。'],
     });
 
-    t.note('举个真的例子', `把价签换成 **${D.tie.tolls.slice(1).join('、')}**，表就变成 **${D.tie.best.join(' / ')}**。\n\n第 6 格的两个来源都是 **6 元**，一样小。于是有两条最省路线，都花 **${D.tie.bestCost} 元**：\n\n· ${D.tie.paths[0].join('→')}\n· ${D.tie.paths[1].join('→')}`);
+    const tieBox = t.canvas();
+    tieBox.innerHTML = '<div class="small muted" style="margin-bottom:8px">两条路线，都是 ' + T2.bestCost + ' 元</div>';
+    T2.paths.forEach((pth) => {
+      const holder = t.el('div', '');
+      holder.style.marginBottom = '12px';
+      tieBox.appendChild(holder);
+      const stt = FunAl.widgets.stairs(holder, { n: 6, tolls: T2.tolls, showCost: true, baseH: 30, stepH: 8 });
+      const steps = pth.slice(1).map((v, k) => v - pth[k]);
+      stt.showPath(steps);
+      pth.forEach((i) => stt.mark(i, 'gold'));
+    });
+
+    t.note('平局怎么办', `倒着找路线的时候，如果两个来源一样小，**两条都是最省的**，随便走哪条。\n\n（如果题目只要一条，挑哪边都行；如果题目问「有几条最省路线」，那就是另一道题了——你得数，而不是挑。）`);
 
     await t.say('爬楼梯这个场景到此结束。下一屏是真正的考试：**一道和楼梯毫无关系的题**，你自己上。');
     t.done();

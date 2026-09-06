@@ -204,3 +204,6 @@ strong { font-weight: 700; }
 .aside-body { padding: 10px 0 14px; font-size: .95rem; }
 .aside-body p { margin: 0; }
 .aside-body p + p { margin-top: .6em; }
+
+.way-out .btn { border-style: dashed; color: var(--muted); }
+.way-out .btn:hover { color: var(--ink); border-color: var(--accent); }

@@ -187,7 +187,7 @@ FunAl.register({
     t.note('你刚才做了什么', `一道跟楼梯毫无关系的题，你用**同一套四问**做完了：\n\n**一格代表什么** → 每个金额一格\n**最后一步有哪几种** → 最后一枚是 1、3 还是 4 元\n**怎么合并** → 挑小的，再 +1\n**起步格填几** → 凑 0 元 = 0 枚`);
 
     await t.say('还有一个坑，遇到就会卡住，先给你踩一次。');
-    t.note('如果凑不出来呢', `换一套硬币：**只有 ${U.values.join(' 元和 ')} 元**，没有 1 元了。\n\n那「凑 ${U.target} 元」怎么办？${U.target} − ${U.values[0]} = ${U.target - U.values[0]} 元凑不出，${U.target} − ${U.values[1]} = ${U.target - U.values[1]} 元也凑不出。**三条来路全军覆没。**`);
+    t.note('如果凑不出来呢', `换一套硬币：**只有 ${U.values.join(' 元和 ')} 元**，没有 1 元了。\n\n那「凑 ${U.target} 元」怎么办？${U.target} − ${U.values[0]} = ${U.target - U.values[0]} 元凑不出，${U.target} − ${U.values[1]} = ${U.target - U.values[1]} 元也凑不出。**${U.values.length} 条来路全军覆没。**`);
 
     await t.ask.choice(`那「凑 ${U.target} 元」那一格该填什么？`, [
       '填一个大到永远不会被挑中的数，表示「这一格根本凑不出来」。',

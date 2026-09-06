@@ -213,6 +213,9 @@ strong { font-weight: 700; }
 .aside-body p { margin: 0; }
 .aside-body p + p { margin-top: .6em; }
 
+.way-out .btn { border-style: dashed; color: var(--muted); }
+.way-out .btn:hover { color: var(--ink); border-color: var(--accent); }
+
 </style>
 </head>
 <body>
@@ -448,6 +451,23 @@ strong { font-weight: 700; }
         return new Promise((resolve) => setup((v) => { if (!run.cancelled) resolve(v); }));
       },
       ask: {
+        /* After the hints run out and the learner is still stuck, let them out.
+           Being trapped on one screen is the worst outcome in a single-page lesson. */
+        offerWayOut(box, resolve, reveal) {
+          if (box.querySelector('.way-out')) return;
+          const row = el('div', 'btn-row reveal way-out');
+          const b = el('button', 'btn', '卡住了，给我答案，继续往下');
+          row.appendChild(b);
+          b.addEventListener('click', () => {
+            if (run.cancelled) return;
+            row.remove();
+            record({ kind: 'gave_up', prompt: run.prompt, answer: '看了答案' });
+            reveal();
+            clearPrompt();
+            resolve();
+          });
+          box.parentNode.insertBefore(row, box.nextSibling);
+        },
         /* Multiple choice with a correct answer. Resolves with the correct index once chosen. */
         async choice(prompt, options, opts = {}) {
           const g = guard(); if (g) return g;
@@ -455,6 +475,7 @@ strong { font-weight: 700; }
           const correct = Array.isArray(opts.correct) ? opts.correct : [opts.correct];
           setPrompt(prompt, opts.hints);
           const box = append(el('div', 'choices reveal'));
+          let missed = 0;
           return new Promise((resolve) => {
             options.forEach((label, i) => {
               const b = el('button', '', md(label));
@@ -484,6 +505,14 @@ strong { font-weight: 700; }
                     fb = '这个选项不对。回到上面的画面，对着数字再看一遍。';
                   }
                   t.wrong(fb);
+                  if (++missed >= (run.hints.length || 0) + 2) {
+                    t.ask.offerWayOut(box, () => resolve(correct[0]), () => {
+                      const right = box.querySelectorAll('button')[correct[0]];
+                      if (right) right.classList.add('right');
+                      box.querySelectorAll('button').forEach((x) => (x.disabled = true));
+                      if (opts.explainRight) t.right(typeof opts.explainRight === 'function' ? opts.explainRight(correct[0]) : opts.explainRight);
+                    });
+                  }
                 }
               });
               box.appendChild(b);
@@ -517,6 +546,7 @@ strong { font-weight: 700; }
           const g = guard(); if (g) return g;
           if (prompt) await t.say(prompt, { pause: 120 });
           setPrompt(prompt, opts.hints);
+          let missed = 0;
           const row = append(el('div', 'numask reveal'));
           const input = el('input');
           input.type = 'number'; input.inputMode = 'numeric'; input.placeholder = opts.placeholder || '填一个数字';
@@ -546,6 +576,14 @@ strong { font-weight: 700; }
                 if (!fb) fb = opts.defaultFeedback || `不是 ${v}。别急着猜，回到上面的画面，一个一个数。`;
                 t.wrong(fb);
                 input.value = ''; input.focus();
+                if (++missed >= (run.hints.length || 0) + 2) {
+                  t.ask.offerWayOut(row, () => resolve(accepted[0]), () => {
+                    input.value = String(accepted[0]);
+                    input.disabled = true; btn.disabled = true;
+                    if (opts.explainRight) t.right(typeof opts.explainRight === 'function' ? opts.explainRight(accepted[0]) : opts.explainRight);
+                    else t.right(`答案是 **${accepted[0]}${opts.unit || ''}**。别卡在这儿，往下走，后面还会再用到它。`);
+                  });
+                }
               }
             };
             btn.addEventListener('click', submit);
@@ -559,6 +597,7 @@ strong { font-weight: 700; }
           if (prompt) await t.say(prompt, { pause: 120 });
           setPrompt(prompt, opts.hints);
           const want = (opts.correct || []).slice().sort().join(',');
+          let missed = 0;
           const box = append(el('div', 'choices reveal'));
           const picked = new Set();
           const btns = options.map((label, i) => {
@@ -592,6 +631,13 @@ strong { font-weight: 700; }
               } else {
                 const fb = opts.feedback ? opts.feedback(got) : null;
                 t.wrong(fb || '这一组不对。看看漏了哪个，或者多选了哪个。');
+                if (++missed >= (run.hints.length || 0) + 2) {
+                  t.ask.offerWayOut(row, () => resolve((opts.correct || []).slice()), () => {
+                    btns.forEach((x, i) => { x.disabled = true; x.classList.toggle('right', (opts.correct || []).includes(i)); x.classList.toggle('picked', (opts.correct || []).includes(i)); });
+                    submit.remove();
+                    if (opts.explainRight) t.right(opts.explainRight);
+                  });
+                }
               }
             });
           });
@@ -602,6 +648,7 @@ strong { font-weight: 700; }
           if (prompt) await t.say(prompt, { pause: 120 });
           setPrompt(prompt, opts.hints);
           const shuffled = opts.shuffled || items.map((_, i) => i).slice().reverse();
+          let missed = 0;
           const wrap = append(el('div', 'order reveal'));
           const slots = el('div', 'order-slots');
           const pool = el('div', 'order-pool');
@@ -617,6 +664,18 @@ strong { font-weight: 700; }
                 const fb = opts.feedback ? opts.feedback(idx, next) : null;
                 t.wrong(fb || `这一句不是现在该放的。先想想：在做这一句之前，你必须先知道什么？`);
                 record({ kind: 'order', prompt, answer: items[idx], correct: false });
+                if (++missed >= (run.hints.length || 0) + 2) {
+                  t.ask.offerWayOut(wrap, () => resolve_(true), () => {
+                    while (next < items.length) {
+                      const slot = el('div', 'order-slot');
+                      slot.innerHTML = `<span class="n">${next + 1}</span>` + md(items[next]);
+                      slots.appendChild(slot);
+                      next++;
+                    }
+                    pool.innerHTML = '';
+                    if (opts.explainRight) t.right(opts.explainRight);
+                  });
+                }
                 return;
               }
               b.disabled = true;
@@ -649,7 +708,7 @@ strong { font-weight: 700; }
           const rightCol = el('div', 'match-col');
           wrap.append(leftCol, rightCol);
           const rightOrder = opts.rightOrder || pairs.map((_, i) => i).slice().reverse();
-          let sel = null, done = 0;
+          let sel = null, done = 0, missed = 0;
           const lefts = pairs.map((p, i) => {
             const b = el('button', 'match-card', md(p.term));
             b.addEventListener('click', () => {
@@ -674,6 +733,14 @@ strong { font-weight: 700; }
                 const fb = opts.feedback ? opts.feedback(pairs[li].term, p.did) : null;
                 t.wrong(fb || `「${pairs[li].term}」说的不是这件事。再看看你到底在哪一屏做过这个动作。`);
                 record({ kind: 'match', prompt, answer: pairs[li].term + ' → ' + p.did, correct: false });
+                if (++missed >= (run.hints.length || 0) + 3) {
+                  t.ask.offerWayOut(wrap, () => resolveAll(true), () => {
+                    leftCol.querySelectorAll('button').forEach((x) => { x.disabled = true; x.classList.add('right'); x.classList.remove('sel'); });
+                    rightCol.querySelectorAll('button').forEach((x) => { x.disabled = true; x.classList.add('right'); x.classList.remove('armed'); });
+                    const lines = pairs.map((q) => `**${q.term.replace(/\*/g, '')}** → ${q.did}`).join('\n\n');
+                    t.note('正确的对应', lines);
+                  });
+                }
                 return;
               }
               sel.disabled = true; sel.classList.remove('sel'); sel.classList.add('right');
@@ -1659,7 +1726,15 @@ FunAl.register({
         t.clearHints();
         resolveDone(true);
       } else if (found.length < D.table[4]) {
-        t.wrong(`你找到了 ${found.length} 条，但还有没找到的。再想想：有没有哪种「先跨一大步」的走法你还没试过？`);
+        const have = found.map((f) => f.join(''));
+        const missing = D.routes4.filter((r) => !have.includes(r.join('')));
+        const withOneTwo = missing.filter((r) => r.filter((k) => k === 2).length === 1);
+        let why;
+        if (missing.some((r) => r.every((k) => k === 2))) why = '你试过**全程都跨 2 级**吗？两大步就到顶了。';
+        else if (missing.some((r) => r.every((k) => k === 1))) why = '你试过**一级一级慢慢走**吗？四小步。';
+        else if (withOneTwo.length) why = `含一个 2 级的走法一共有 **3 条**：那一大步可以迈在开头、中间、结尾。你现在有 ${3 - withOneTwo.length} 条，还差 ${withOneTwo.length} 条。`;
+        else why = '再回去走走看。';
+        t.wrong(`你找到了 ${found.length} 条，还差 ${missing.length} 条。${why}`);
       }
     });
     await doneP;
@@ -1797,34 +1872,132 @@ FunAl.register({
 
     t.note('你自己推出来的', '**到第 4 级的走法数 = 到第 3 级的走法数 + 到第 2 级的走法数**\n\n也就是 **5 = 3 + 2**。\n\n这不是我告诉你的公式，是你把 5 张卡片分了两堆、又剪掉最后一脚看出来的。');
 
-    await t.ask.choice('顺手问一句：刚才我们按「最后一脚」分。那按「**第一脚**」分行不行？', [
-      '也行，一样能分成不重不漏的两堆。',
-      '不行，只有最后一脚能分。',
-    ], {
-      correct: 0,
-      feedback: {
-        1: '真的试一下：第一脚走 1 级的有 3 条，走 2 级的有 2 条。也是不重不漏。所以按第一脚分**确实也行**。别人告诉你「必须看最后一步」的时候，这句话其实说得太满了。',
-      },
-      explainRight: '对，按第一脚分**也是**不重不漏的。这里没有骗你。',
-      hints: ['自己数一下：这 5 条里，第一脚走 1 级的有几条？走 2 级的有几条？'],
-    });
+    await t.say('这条规律是你自己看出来的。但先别急着用它——');
+    await t.say('刚才我们是按「最后一脚」分的。你可能会想：**为什么偏偏是最后一脚？换个分法行不行？**');
+    await t.say('这个问题问得好，而且答案可能跟你想的不一样。下一屏你亲手再分两次。');
 
-    await t.say('那为什么大家都说「看最后一步」？关键不在分得干不干净，**在于剪掉之后剩下的是什么。**');
-    await t.say('剪掉**最后**一脚，剩下的是「从地面走到第 3 级」——和原来那道题一模一样，只是数字变小了。你可以直接接着往下问。');
-    await t.say('剪掉**第一**脚，剩下的是「从第 1 级走到第 4 级」。它不是原来那道题，你得先说服自己「这跟从地面走到第 3 级是一回事」。这段楼梯上确实是一回事，因为每级台阶都长得一样。');
-    await t.say('但等一下你会遇到一段**每级价钱都不一样**的楼梯。到那时，「从第 1 级出发」和「从地面出发」就不再是同一道题了，按第一脚分当场散架。');
-
-    t.note('真正的判据', '不是「必须看最后一步」，而是：\n\n**剪掉那一步之后，剩下的必须还是同一道题，只是数字更小。**\n\n看最后一步之所以好用，是因为它剪完剩下的永远是「从地面到第 k 级」，永远是原题本身。');
-
-    t.aside('深入一点：那按「用了几个 2 级」来分呢？', '也能分干净：用 0 个 2 的有 1 条，用 1 个 2 的有 3 条，用 2 个 2 的有 1 条。1 + 3 + 1 = 5，没错。\n\n可是剪掉之后剩下什么？不是一道更小的同类题，而是一道全新的题（「用 1 个 2 走到第 4 级有几种」）。它没法接着往下拆，套娃断在这里。\n\n所以分法可以有很多种，能用的只有那些**剪完还剩同一道题**的分法。');
-
-    await t.say('下一屏，你会用这条规律一路往上算——但先得填一个很多人会填错的格子。');
     t.done();
   },
 });
 
 
-// ---- src/levels/04_boundary.js ----
+// ---- src/levels/04_splits.js ----
+FunAl.register({
+  id: 'splits',
+  title: '还有别的分法吗',
+  goal: '学习者亲手用另外两种方式分堆，看到「按第一脚分」需要一个额外前提、「按用了几个 2 分」当场崩掉，从而拿到真正的判据。',
+  minutes: 3,
+  async run(t) {
+    const D = FunAl.data.ways;
+    const R = D.routes4;
+    const chip = (r) => r.map((k) => `+${k}`).join(' ');
+    const chipHead = (r) => `<span class="tail">+${r[0]}</span> ` + r.slice(1).map((k) => `+${k}`).join(' ');
+
+    await t.say('上一屏你说「按第一脚分也行」。那就**真的试一次**，别嘴上说说。');
+
+    const b1Box = t.canvas();
+    const b1 = FunAl.widgets.buckets(b1Box, {
+      cards: R,
+      buckets: ['第一脚走 1 级', '第一脚走 2 级'],
+      format: chipHead,
+      answer: (r) => (r[0] === 1 ? 0 : 1),
+      poolLabel: '这次看**开头**那个橙色数字。点卡片，再点筐。',
+      onWrong: (r) => t.wrong(`这条路线的第一脚是 **+${r[0]}**，橙色标出来了。`),
+    });
+    t.hints(['这次看每张卡片最**左边**那个橙色数字。']);
+    await t.waitFor((resolve) => { const iv = setInterval(() => { if (b1.counts()[0] + b1.counts()[1] === 5) { clearInterval(iv); setTimeout(() => resolve(true), 400); } }, 150); });
+    t.clearHints();
+    t.right(`**${b1.counts()[0]} 条 + ${b1.counts()[1]} 条 = 5 条。** 不重不漏，跟按最后一脚分一样干净。`);
+
+    await t.say('那把第一脚也剪掉，看剩下什么。');
+    await t.ask.confirm('剪掉第一脚');
+    b1.cutTails();
+    await t.pause(600);
+
+    const leftBox = t.canvas();
+    leftBox.innerHTML = `<div class="small muted" style="margin-bottom:8px">左筐剪掉第一脚之后，剩下这 3 条</div>`;
+    FunAl.widgets.routeChips(leftBox, [[1, 1, 1], [1, 2], [2, 1]]);
+
+    await t.ask.choice('这 3 条，是「到第 3 级」的全部走法吗？', [
+      '不完全是。它们是「**从第 1 级**走到第 4 级」的走法，起点不一样。',
+      '是的，一模一样。',
+    ], {
+      correct: 0,
+      feedback: {
+        1: '看仔细：剪掉第一脚之后，人已经站在**第 1 级**了，剩下的路是从第 1 级走到第 4 级。「到第 3 级」说的是从**地面**出发。起点不同。',
+      },
+      explainRight: '对。起点变了。',
+      hints: ['剪掉第一脚之后，人站在哪一级？', '「到第 3 级」是从哪里出发的？'],
+    });
+
+    await t.ask.choice('那它们算不算「同一道题」？', [
+      '算，但要多说一句：因为这段楼梯每一级都长得一样，从第 1 级往上走 3 级，跟从地面往上走 3 级完全一回事。',
+      '不算，起点不一样就是两道题。',
+    ], {
+      correct: 0,
+      feedback: {
+        1: '这段楼梯上确实是一回事——台阶没有编号差别，从哪儿起步都一样。所以按第一脚分**在这道题上能用**。只是你得先说这句话。',
+      },
+      explainRight: '对。**能用，但多了一个前提：每级台阶都一样。**',
+      hints: ['这段楼梯上，第 1 级和地面有什么区别吗？'],
+    });
+
+    t.note('两种分法都能走通', '按**最后一脚**分，剪完剩下的是「从地面到第 3 级」——**原题本身**，不用多说任何话。\n\n按**第一脚**分，剪完剩下的是「从第 1 级到第 4 级」。在这段楼梯上它和原题是一回事，因为台阶都一样。\n\n那要是台阶**不一样**呢（比如后面那道每级价钱都不同的楼梯）？照样能走通——只是格子里写的东西要跟着改：不再是「从地面到第 k 级」，而是「**从第 k 级出发到终点**最少要多少」，表从右往左填。\n\n**两种是一体两面，都对。** 这门课统一用最后一脚，只是因为那样格子的编号就是楼层号，读起来顺一点。');
+
+    await t.say('再试第三种分法：**按这条路用了几个「2 级」来分。**');
+
+    const b2Box = t.canvas();
+    const b2 = FunAl.widgets.buckets(b2Box, {
+      cards: R,
+      buckets: ['一个 2 都没用', '用了 1 个 2', '用了 2 个 2'],
+      format: chip,
+      answer: (r) => r.filter((k) => k === 2).length,
+      poolLabel: '数一数每张卡片里有几个 2。',
+      onWrong: (r) => t.wrong(`这条是 ${chip(r)}，里面有 **${r.filter((k) => k === 2).length} 个 2**。`),
+    });
+    t.hints(['数卡片上有几个「+2」。']);
+    await t.waitFor((resolve) => { const iv = setInterval(() => { if (b2.counts().reduce((a, b) => a + b, 0) === 5) { clearInterval(iv); setTimeout(() => resolve(true), 400); } }, 150); });
+    t.clearHints();
+    t.right(`**${b2.counts().join(' + ')} = 5 条。** 又是不重不漏。三种分法，三次都干净。`);
+
+    await t.say('那问题来了：**干净就够了吗？**');
+    await t.say('把中间那个筐（用了 1 个 2）拿出来，把那个 2 剪掉，看剩下什么。');
+    await t.ask.confirm('把那个 2 剪掉');
+
+    const collapseBox = t.canvas();
+    collapseBox.innerHTML = `
+      <div class="small muted" style="margin-bottom:8px">剪之前</div>
+      <div class="w-chips">${[[1, 1, 2], [1, 2, 1], [2, 1, 1]].map((r) => `<div class="w-chip">${chip(r)}</div>`).join('')}</div>
+      <div class="small muted" style="margin:14px 0 8px">剪掉那个 2 之后</div>
+      <div class="w-chips">${[0, 1, 2].map(() => `<div class="w-chip dup">+1 +1</div>`).join('')}</div>`;
+    await t.pause(800);
+
+    await t.ask.choice('三张**不一样**的卡片，剪完变成了三张**一模一样**的卡片。而到第 2 级一共只有 2 条走法（+1+1 和 +2）。这说明什么？', [
+      '说明这堆的数量（3）跟「到第 2 级的走法数」（2）对不上。剪完之后不是一一对应，套不下去了。',
+      '说明剪错了，应该剪别的位置。',
+      '说明这种分法也可以，只是麻烦一点。',
+    ], {
+      correct: 0,
+      feedback: {
+        1: '「用了 1 个 2」这个筐里，那个 2 可能在开头、中间、结尾。你剪哪一个？不管剪哪个，剩下的都不是一道「从地面到第几级」的题。',
+        2: '不是麻烦，是**根本接不下去**。到第 2 级只有 2 条路，可这个筐有 3 条。你没法说「这个筐的数量 = 到第 2 级的走法数」，那这一步就白拆了。',
+      },
+      explainRight: '对。**分得干净，不代表能接着往下拆。**',
+      hints: [
+        '数一数：剪完剩下 3 张卡。可到第 2 级一共有几条走法？',
+        '3 对 2，对不上。那你还能说「这个筐的数量等于某道小题的答案」吗？',
+      ],
+    });
+
+    t.note('这才是真正的判据', '分法可以有很多种，**能用的只有一种**：\n\n**剪掉那一步之后，剩下的必须还是同一道题，只是数字更小；而且原来的卡片和剩下的卡片要一一对应，不多不少。**\n\n· 按最后一脚分 → 剩下「从地面到第 3 级」，**原题本身**。✓\n· 按第一脚分 → 剩下「从第 1 级到第 4 级」，得先说「台阶都一样」。这题行，别的题不一定。\n· 按用了几个 2 分 → 剩下的根本不是「到第几级」这种题。✗\n\n**「看最后一步」之所以到处都灵，就是因为它剪完永远落回原题。**');
+
+    await t.say('判据有了。下一屏回到正题：用这条规律一路往上算——但要先填一个很多人会填错的格子。');
+    t.done();
+  },
+});
+
+
+// ---- src/levels/05_boundary.js ----
 FunAl.register({
   id: 'boundary',
   title: '第 0 级填几',
@@ -1936,7 +2109,7 @@ FunAl.register({
 });
 
 
-// ---- src/levels/05_naive.js ----
+// ---- src/levels/06_naive.js ----
 FunAl.register({
   id: 'naive',
   title: '一台没记性的机器',
@@ -2041,7 +2214,7 @@ FunAl.register({
 });
 
 
-// ---- src/levels/06_memo.js ----
+// ---- src/levels/07_memo.js ----
 FunAl.register({
   id: 'memo',
   title: '给它一个账本',
@@ -2124,7 +2297,7 @@ FunAl.register({
 });
 
 
-// ---- src/levels/07_naming.js ----
+// ---- src/levels/08_naming.js ----
 FunAl.register({
   id: 'naming',
   title: '给做过的事起名字',
@@ -2172,7 +2345,7 @@ FunAl.register({
       title: '你填出来的那排格子',
     });
 
-    t.note('括号不是乘法', '别人写 **f(4)** 或者 **dp[4]** 的时候，那个括号（或方括号）**不是乘号**。\n\n它就是「第 4 格」的意思。**f(4) 念作「第 4 格里的那个数」。**\n\n`f(4)`、`dp[4]`、「到第 4 级有几种走法」——这三种写法说的是同一个东西。');
+    t.note('括号不是乘法', '别人写 **f(4)** 或者 **dp[4]** 的时候，那个括号（或方括号）**不是乘号**。\n\n它就是「第 4 格」的意思。**f(4) 念作「第 4 格里的那个数」。**\n\n`f(4)`、`dp[4]`、「到第 4 级有几种走法」——这三种写法说的是同一个东西。\n\n还有一件小事：有人写 `dp[i]`，有人写 `f(k)`，有人写 `a[n]`。**那个字母是谁完全无所谓**，它只是「第几格」里的「几」。看到不认识的字母，就在心里念成「第几」。');
 
     let picked = false;
     row.pickable((i, it) => {
@@ -2224,7 +2397,7 @@ FunAl.register({
 });
 
 
-// ---- src/levels/08_toll.js ----
+// ---- src/levels/09_toll.js ----
 FunAl.register({
   id: 'toll',
   title: '换一道题：过路费',
@@ -2345,7 +2518,7 @@ FunAl.register({
 });
 
 
-// ---- src/levels/09_min.js ----
+// ---- src/levels/10_min.js ----
 FunAl.register({
   id: 'minrule',
   title: '加号变成挑小的',
@@ -2423,7 +2596,7 @@ FunAl.register({
       ],
     });
 
-    t.note('同一套办法，只换了一个动作', '**数「有几种」** → 把两个来源**加起来**。\n\n**求「最少花多少」** → 在两个来源里**挑小的**，再加上这一步自己的代价。\n\n**求「最多能拿多少」** → 在两个来源里**挑大的**，再加上这一步自己的收益。\n\n前面找最后一步、定起步格、从小往大填，全都一模一样。');
+    t.note('同一套办法，只换了一个动作', '先把每一种「最后一步」各自算成一个数——**那一步自己的代价，算进它自己那一支**。然后：\n\n**数「有几种」** → 把这些数**加起来**。\n\n**求「最少」** → 在这些数里**挑小的**。\n\n**求「最多」** → 在这些数里**挑大的**。\n\n这道题里两支的代价碰巧一样（都是踩上第 6 级的 ' + tolls[6] + ' 元），所以写成「挑小的再加 ' + tolls[6] + '」也对。但**别把这当成通则**——有的题里，不同的最后一步代价不同，甚至有一支根本不花钱。到时候就得老老实实一支一支算完再挑。\n\n前面找最后一步、定起步格、从小往大填，全都一模一样。');
 
     await t.say('下一屏，你自己把这张最省表从头填一遍——而且填完之后，我要你**亲手把那条最省路线倒着找回来**。');
     t.done();
@@ -2431,7 +2604,7 @@ FunAl.register({
 });
 
 
-// ---- src/levels/10_trust.js ----
+// ---- src/levels/11_trust.js ----
 FunAl.register({
   id: 'trust',
   title: '凭什么信小格子',
@@ -2507,7 +2680,19 @@ FunAl.register({
       },
     });
     let seenTotal = null;
-    st2.onStep((ev) => { if (ev.done) { seenTotal = ev.total; setTimeout(() => st2.reset(), 1600); } });
+    st2.onStep((ev) => {
+      if (!ev.done) return;
+      const isTheRoute = ev.visited.join('-') === D.bestPath.join('-');
+      if (!isTheRoute) {
+        t.wrong(ev.extra
+          ? `这条是 ${ev.visited.join('→')}，${ev.cost} 元过路费加 ${ev.extra} 元罚款。不过我要你走的是**老表指的那条**：${D.bestPath.join('→')}，也就是 +1、+2、+2、+1。`
+          : `这条是 ${ev.visited.join('→')}，没有连着跨两次 2 级，所以没被罚。去走**老表指的那条**：${D.bestPath.join('→')}，也就是 +1、+2、+2、+1。`);
+        setTimeout(() => st2.reset(), 1400);
+        return;
+      }
+      seenTotal = ev.total;
+      setTimeout(() => st2.reset(), 1800);
+    });
     t.hints([`走 ${D.bestPath.join('→')} 这条：先 +1，再 +2，再 +2，最后 +1。`, '注意中间连着跨了两次 2 级。']);
     await t.waitFor((resolve) => { const iv = setInterval(() => { if (seenTotal !== null) { clearInterval(iv); resolve(seenTotal); } }, 150); });
     t.clearHints();
@@ -2526,6 +2711,9 @@ FunAl.register({
 
     const cheap = B.allRoutes.filter((r) => r.total < B.realBest);
     t.note('看清楚发生了什么', `老表说 **${B.oldTableSays} 元**。\n\n可 13 条路里，最便宜的一条要 **${B.realBest} 元**。\n\n花 ${B.oldTableSays} 元的走法有 **${cheap.length + (B.allRoutes.filter((r) => r.total === B.oldTableSays).length)} 条**——一条都没有。\n\n**老表不是漏掉了更好的路，它算出了一个买不到的价钱。**`);
+
+    await t.say(`说句公道话：这次最省的**路线**其实没变，还是 ${D.bestPath.join('→')}，只是价钱从 ${B.oldTableSays} 变成了 ${B.realBest}。`);
+    await t.say('但这不算老表走运。**罚款金额再高一点，最省的路线就会换成另一条。** 一张算出假价钱的表，你没理由相信它指的路是真的。');
 
     await t.ask.choice('为什么这次不灵了？', [
       '因为站在第 5 级的时候，「我是怎么来的」开始影响后面要花多少了——上一步是不是跨了 2 级，决定了下一步会不会被罚。',
@@ -2569,7 +2757,7 @@ FunAl.register({
 });
 
 
-// ---- src/levels/11_filltable.js ----
+// ---- src/levels/12_filltable.js ----
 FunAl.register({
   id: 'filltable',
   title: '自己填最省表',
@@ -2640,7 +2828,8 @@ FunAl.register({
 
     t.right(`表填完了：到第 6 级最省 **${D.bestCost} 元**。跟你自己试出来的一样。`);
 
-    await t.say('但表里只有数字，**没有路线**。那条最省的路到底怎么走？自己倒着找回来。');
+    await t.say('但表里只有数字，**没有路线**。');
+    await t.say('那条最省的路你早就见过了（上一道题揭晓过）。所以这一步的重点**不是找出它**，而是学会**怎么从一张只有数字的表里，把路线挖出来**——换一道题，你手上就只有这张表了。');
     await t.say('从第 6 格开始，一路往回问：**这一格的数，是从哪一格来的？**');
 
     const chain = [];
@@ -2684,21 +2873,79 @@ FunAl.register({
 
     t.note('怎么从表里找回路线', '表里每一格只写了一个数。想知道路线，就**倒着问**：这一格的数，减掉本级的过路费，等于左边哪一格？那一格就是它的来路。\n\n（写代码的时候，也可以填表时顺手记一下「我挑的是哪一格」，省得倒推。）');
 
-    await t.ask.choice(`最后一个坑：如果倒着问的时候，**左边两格一样小**呢？`, [
-      '那说明有两条一样省的路线，挑哪个都对。',
-      '那说明表填错了。',
-      '那要选左边那一格，规定就是这样。',
+    await t.say('还有一个坑，遇到就会卡住。**换一组价签，你自己撞一次。**');
+
+    const T2 = D.tie;
+    const box2 = t.canvas();
+    const row2 = FunAl.widgets.cells(box2, {
+      n: 6,
+      label: (i) => (i === 0 ? '地面' : `第 ${i} 级`),
+      sub: (i) => (i === 0 ? '免费' : `过路费 ${T2.tolls[i]}`),
+      title: '换一组价签，再填一次',
+      values: { 0: T2.best[0], 1: T2.best[1], 2: T2.best[2], 3: T2.best[3] },
+    });
+    await t.say(`前四格我先填好了。你填**第 4、5、6 格**。`);
+
+    for (let i = 4; i <= 6; i++) {
+      row2.links(i, [i - 1, i - 2], ['+1', '+2']);
+      const a = T2.best[i - 1], bb = T2.best[i - 2];
+      t.hints([`第 ${i - 1} 级是 ${a} 元，第 ${i - 2} 级是 ${bb} 元。`, `挑小的，再加第 ${i} 级的 ${T2.tolls[i]} 元。`]);
+      await row2.fill(i, {
+        answer: T2.best[i],
+        onWrong: (v) => {
+          if (v === a + bb + T2.tolls[i]) t.wrong('又把两个来源加起来了。它们是两条路，你只走一条。');
+          else if (v === Math.min(a, bb)) t.wrong(`挑对了小的（${Math.min(a, bb)}），但还没加第 ${i} 级的 ${T2.tolls[i]} 元。`);
+          else t.wrong(`第 ${i - 1} 级 ${a} 元，第 ${i - 2} 级 ${bb} 元，挑小的，再加 ${T2.tolls[i]} 元。`);
+        },
+      });
+      t.clearHints();
+      await t.pause(700);
+      row2.clearLinks();
+    }
+
+    row2.links(6, [5, 4], ['+1', '+2']);
+    await t.ask.choice(`现在倒着问：第 6 格的 ${T2.best[6]} 元，是从哪一格来的？`, [
+      `第 5 级（${T2.best[5]} 元）`,
+      `第 4 级（${T2.best[4]} 元）`,
+      `两个都行——它们一样小。`,
+    ], {
+      correct: 2,
+      feedback: {
+        0: `第 5 级确实能走通：${T2.best[5]} + ${T2.tolls[6]} = ${T2.best[6]}。但先看一眼第 4 级那格是多少。`,
+        1: `第 4 级也确实能走通：${T2.best[4]} + ${T2.tolls[6]} = ${T2.best[6]}。那第 5 级那格呢？`,
+      },
+      explainRight: `对。第 5 级和第 4 级**都是 ${T2.best[5]} 元**，一样小。`,
+      hints: [`把第 5 格和第 4 格的数字念一遍。`, `${T2.best[5]} 和 ${T2.best[4]}，哪个更小？`],
+    });
+    row2.markLink(5, 'pick'); row2.markLink(4, 'pick');
+
+    await t.ask.choice('那这说明什么？', [
+      `说明有**两条**一样省的路线，都花 ${T2.bestCost} 元。挑哪条都对。`,
+      '说明这张表填错了。',
+      '说明得挑左边那一格，规定就是这样。',
     ], {
       correct: 0,
       feedback: {
-        1: '一样小是很正常的事，不是错。',
+        1: '两个数一样大是很正常的事，不是错。你刚才每一格都是照规则算的。',
         2: '没有这种规定。两条路一样便宜，走哪条都花一样的钱。',
       },
-      explainRight: '对。**格子里的数不会变，变的只是路线有几条。**',
-      hints: ['两个来源一样小，说明从哪边来最后都花一样的钱。'],
+      explainRight: `对。**格子里的数不会变，变的只是路线有几条。**`,
+      hints: ['两个来源一样小，说明从哪边来，最后都花一样的钱。'],
     });
 
-    t.note('举个真的例子', `把价签换成 **${D.tie.tolls.slice(1).join('、')}**，表就变成 **${D.tie.best.join(' / ')}**。\n\n第 6 格的两个来源都是 **6 元**，一样小。于是有两条最省路线，都花 **${D.tie.bestCost} 元**：\n\n· ${D.tie.paths[0].join('→')}\n· ${D.tie.paths[1].join('→')}`);
+    const tieBox = t.canvas();
+    tieBox.innerHTML = '<div class="small muted" style="margin-bottom:8px">两条路线，都是 ' + T2.bestCost + ' 元</div>';
+    T2.paths.forEach((pth) => {
+      const holder = t.el('div', '');
+      holder.style.marginBottom = '12px';
+      tieBox.appendChild(holder);
+      const stt = FunAl.widgets.stairs(holder, { n: 6, tolls: T2.tolls, showCost: true, baseH: 30, stepH: 8 });
+      const steps = pth.slice(1).map((v, k) => v - pth[k]);
+      stt.showPath(steps);
+      pth.forEach((i) => stt.mark(i, 'gold'));
+    });
+
+    t.note('平局怎么办', `倒着找路线的时候，如果两个来源一样小，**两条都是最省的**，随便走哪条。\n\n（如果题目只要一条，挑哪边都行；如果题目问「有几条最省路线」，那就是另一道题了——你得数，而不是挑。）`);
 
     await t.say('爬楼梯这个场景到此结束。下一屏是真正的考试：**一道和楼梯毫无关系的题**，你自己上。');
     t.done();
@@ -2706,7 +2953,7 @@ FunAl.register({
 });
 
 
-// ---- src/levels/12_coins.js ----
+// ---- src/levels/13_coins.js ----
 FunAl.register({
   id: 'coins',
   title: '一道新题：凑硬币',
@@ -2896,7 +3143,7 @@ FunAl.register({
     t.note('你刚才做了什么', `一道跟楼梯毫无关系的题，你用**同一套四问**做完了：\n\n**一格代表什么** → 每个金额一格\n**最后一步有哪几种** → 最后一枚是 1、3 还是 4 元\n**怎么合并** → 挑小的，再 +1\n**起步格填几** → 凑 0 元 = 0 枚`);
 
     await t.say('还有一个坑，遇到就会卡住，先给你踩一次。');
-    t.note('如果凑不出来呢', `换一套硬币：**只有 ${U.values.join(' 元和 ')} 元**，没有 1 元了。\n\n那「凑 ${U.target} 元」怎么办？${U.target} − ${U.values[0]} = ${U.target - U.values[0]} 元凑不出，${U.target} − ${U.values[1]} = ${U.target - U.values[1]} 元也凑不出。**三条来路全军覆没。**`);
+    t.note('如果凑不出来呢', `换一套硬币：**只有 ${U.values.join(' 元和 ')} 元**，没有 1 元了。\n\n那「凑 ${U.target} 元」怎么办？${U.target} − ${U.values[0]} = ${U.target - U.values[0]} 元凑不出，${U.target} − ${U.values[1]} = ${U.target - U.values[1]} 元也凑不出。**${U.values.length} 条来路全军覆没。**`);
 
     await t.ask.choice(`那「凑 ${U.target} 元」那一格该填什么？`, [
       '填一个大到永远不会被挑中的数，表示「这一格根本凑不出来」。',
@@ -2919,6 +3166,137 @@ FunAl.register({
 
     await t.say('最后一屏：把你带得走的东西收一收。');
     t.done();
+  },
+});
+
+
+// ---- src/levels/14_takeaway.js ----
+FunAl.register({
+  id: 'takeaway',
+  title: '带走一张清单',
+  goal: '让学习者回看自己走过的路，把四问排成清单，并在三道没见过的题上只做「认题」练习。',
+  minutes: 4,
+  async run(t) {
+    const W = FunAl.data.ways, D = FunAl.data.toll, C = FunAl.data.coins;
+
+    await t.say('结束之前，先回头看看你自己做过什么。');
+
+    const log = t.recall();
+    const answered = log.filter((e) => e.correct !== undefined).length;
+    const gotWrong = log.filter((e) => e.correct === false).length;
+    const bet1 = t.recallOne({ screen: 'hook', kind: 'number' });
+    const betToll = t.recallOne({ screen: 'toll', kind: 'number' });
+    const betCoin = t.recallOne({ screen: 'coins', kind: 'number' });
+
+    const lines = [];
+    if (bet1) lines.push(`开场你押「到第 6 级有 ${bet1.answer} 种走法」，最后你自己算出了 **${W.table[6]} 种**。`);
+    if (betToll) lines.push(`过路费那题你押 ${betToll.answer} 元，自己填表填出了 **${D.bestCost} 元**。`);
+    if (betCoin) lines.push(`硬币那题你押 ${betCoin.answer} 枚，自己填表填出了 **${C.best} 枚**。`);
+    lines.push(`一路上你回答了 **${answered}** 个有对错的问题${gotWrong ? `，其中 **${gotWrong}** 次先答错了再改对` : ''}。`);
+    t.note('你走过的路', lines.join('\n\n') + (gotWrong ? '\n\n答错的那几次才是真正学到东西的地方。' : ''));
+
+    await t.say('你做完了三道题：**数走法**、**算最省的钱**、**凑最少的硬币**。三道题长得完全不一样，但你每次做的事是同一件。');
+    await t.say('把那件事排成顺序。**下面四句话，哪一句得先问？**');
+
+    await t.ask.order('按你实际做事的顺序，把这四句排好：', [
+      '**一格代表什么？** 找一个能从小排到大的编号，格子里写题目问的那个东西。',
+      '**最后一步有哪几种可能？** 每一种，都对应一个更小的格子。',
+      '**几个来源怎么合起来？** 数「有几种」就相加；求「最少」就挑小的，求「最多」就挑大的，再加上这一步自己的代价。',
+      '**起步格填几？** 看格子里写的是什么，最小的那种情况它是多少。',
+    ], {
+      shuffled: [2, 0, 3, 1],
+      feedback: (idx, next) => {
+        const names = ['「一格代表什么」', '「最后一步有哪几种」', '「怎么合起来」', '「起步格填几」'];
+        if (next === 0) return `还不到这一句。你得**先知道格子是什么**，才谈得上后面几步。`;
+        if (idx === 0) return '这一句你已经放过了。';
+        return `${names[idx]} 还早。在问它之前，你得先答完前面那几句——你回想一下在硬币那道题上，你是按什么顺序答的。`;
+      },
+      explainRight: '这就是你在硬币那道题上的实际顺序。',
+      hints: [
+        '想想硬币那一屏，我一共问了你四个问题，第一个问的是什么？',
+        '顺序是：格子是什么 → 最后一步有哪几种 → 怎么合 → 起步格。',
+      ],
+    });
+
+    t.note('把这张清单带走', '**一、一格代表什么？**（能从小排到大，格子里写题目问的东西）\n\n**二、最后一步有哪几种可能？**（每一种对应一个更小的格子）\n\n**三、几个来源怎么合起来？**（几种 → 相加；最少 → 挑小的；最多 → 挑大的；别忘了加上这一步自己的代价）\n\n**四、起步格填几？**（看格子里写的是什么，最小情况下它是多少）\n\n然后从小到大，一格一格填过去。');
+
+    await t.say('最后练三道。**只问第一句：一格代表什么。不用算。**');
+
+    await t.ask.choice('**（一）** 一只青蛙，一次能跳 1 格或者 3 格。跳到第 10 格，有几种跳法？', [
+      '每一格一格，格子里写「跳到这一格有几种跳法」；来路是前 1 格和前 3 格。',
+      '每一种跳法一格。',
+      '两格：一格写「跳 1 格的次数」，一格写「跳 3 格的次数」。',
+    ], {
+      correct: 0,
+      feedback: {
+        1: '跳法有多少种正是要求的答案，你事先不知道有几种，没法给它们编号。',
+        2: '这两个数字不能从小排到大，也没法用「更小的同类题」往下拆。',
+      },
+      explainRight: '对。**跟爬楼梯是同一道题**，只是最后一脚从「1 级或 2 级」变成了「1 格或 3 格」。',
+      hints: ['这道题跟你做的第一道题，差别只有一处。哪一处？'],
+    });
+
+    await t.ask.choice('**（二）** 一排房子，每家有些钱。不能偷相邻的两家。最多能偷多少？', [
+      '每个位置一格，格子里写「只看前面这几家，最多能偷多少」；最后一步是「偷不偷这一家」。',
+      '每个位置一格，格子里写「这一家偷不偷」。',
+      '每个位置一格，格子里写「这一家有多少钱」。',
+    ], {
+      correct: 0,
+      feedback: {
+        1: '「偷不偷」是**选择**，不是答案。格子里要写的是题目问的那个东西——最多能偷多少**钱**。',
+        2: '这是题目给的条件，不是你要算的东西。格子里写的应该是**答案**。',
+      },
+      explainRight: '对。注意这道题的「最后一步」不是「从哪儿来」，而是「**偷还是不偷**」。\n\n偷 → 这家的钱 + 前 k−2 家的答案（隔壁不能偷）。\n不偷 → 前 k−1 家的答案。\n\n**求「最多」，所以挑大的。** 四问一个没少。',
+      hints: [
+        '题目问的是「最多能偷多少钱」。那格子里该写什么？',
+        '这道题的「最后一步」不是从哪一级走上来，而是一个**选择**：这一家，偷还是不偷。',
+      ],
+    });
+
+    await t.ask.choice('**（三）** 一个机器人在方格纸上，只能向右或者向下走。从左上角到右下角，有几条路？', [
+      '每个格子一格，写「到这个格子有几条路」；来路是左边一格和上面一格。格子排成一**面**，不是一排。',
+      '每一行一格，写「这一行有几条路」。',
+      '这道题用不了这套办法。',
+    ], {
+      correct: 0,
+      feedback: {
+        1: '一行里的每个格子答案都不一样，一行只写一个数是不够的。**位置要用两个数才说得清：第几行、第几列。**',
+        2: '能用。只是「我在哪儿」这次要用两个数字来说（第几行第几列），所以格子铺成一面而不是排成一排。',
+      },
+      explainRight: '对。**这就是那句判据在起作用**：站在这里，光知道「第几行」不够，还得知道「第几列」。所以格子里要记的东西多了一样，一排就变成了一面。\n\n跟你在罚款那一屏见过的一模一样。办法没变。',
+      hints: [
+        '在方格纸上，你要说清「我现在在哪儿」，需要几个数字？',
+        '回想罚款那一屏：光知道「我在第几级」不够的时候，一排格子变成了几排？',
+      ],
+    });
+
+    await t.ask.choice('**（四）** 最后一道，回到开场那句话。**手机地图给你算最快路线**——一格代表什么？', [
+      '每个**路口**一格，写「从出发地到这个路口最快要几分钟」；来路是通到它的那几条路，**挑小的**再加上那段路要花的时间。',
+      '每条**路**一格，写「这条路要开几分钟」。',
+      '每个**目的地**一格，写「到这个目的地最快几分钟」。',
+    ], {
+      correct: 0,
+      feedback: {
+        1: '「这条路要开几分钟」是地图**已经知道的条件**，不是要算的答案。格子里写的应该是你还不知道、需要算出来的那个东西。',
+        2: '你只有一个目的地，那就只有一格，没法从小往大填。中间那些路口才是你需要一格一格填过去的东西。',
+      },
+      explainRight: '对。**这就是你刚才填的最省表**，只不过格子不再排成一排，而是散在地图上。\n\n「挑小的再加这一段的时间」——一模一样。',
+      hints: [
+        '地图上什么东西是**很多个**、而且可以一个一个算过去的？',
+        '想想过路费楼梯：格子是「台阶」，格子里写「到这一级最少花多少」。地图上跟「台阶」对应的是什么？',
+      ],
+    });
+
+    await t.say('四道题，你都没算，但你都知道该从哪儿下手了。**这就是这门课想给你的东西。**');
+
+    t.note('开场那三个例子，现在都拆得开了', '**地图算最快路线** → 你刚刚自己答出来了。\n\n**拼写检查把「recieve」改成「receive」** → 格子里写「把这半截改成那半截，最少改几个字母」；最后一步有三种：删一个、加一个、换一个；**挑小的**再 +1。（这题的格子要用两个数才说得清「改到哪儿了」，所以铺成一面。）\n\n**输入法猜你下一个字** → 同一套路：每多打一个字就往前推一格，算过的不重算。\n\n**跟你刚才填的那几张表，是同一件事。**');
+
+    await t.say('课程到这里就结束了。');
+    await t.say('如果你还有想不通的地方，页面底部有「问导师」（开着的话）。它不会直接给你答案——跟这门课一样，它只会往你想通的方向推一把。');
+
+    t.aside('给写过代码的人：三道题的三行代码', '**爬楼梯**\n`f[0]=1; f[1]=1`\n`for k in 2..n: f[k] = f[k-1] + f[k-2]`\n\n**过路费楼梯**\n`g[0]=0; g[1]=toll[1]`\n`for k in 2..n: g[k] = toll[k] + min(g[k-1], g[k-2])`\n\n**凑硬币**\n`h[0]=0; 其余先填一个很大的数`\n`for a in 1..target: h[a] = min(h[a-c] for c in coins if c<=a) + 1`\n\n三段循环长得几乎一样。变的只有三处：格子的编号、来路、以及合并用的是 `+` 还是 `min`。');
+
+    t.done({ label: '回到目录' });
   },
 });
 

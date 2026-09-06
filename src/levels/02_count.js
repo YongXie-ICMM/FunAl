@@ -68,7 +68,15 @@ FunAl.register({
         t.clearHints();
         resolveDone(true);
       } else if (found.length < D.table[4]) {
-        t.wrong(`你找到了 ${found.length} 条，但还有没找到的。再想想：有没有哪种「先跨一大步」的走法你还没试过？`);
+        const have = found.map((f) => f.join(''));
+        const missing = D.routes4.filter((r) => !have.includes(r.join('')));
+        const withOneTwo = missing.filter((r) => r.filter((k) => k === 2).length === 1);
+        let why;
+        if (missing.some((r) => r.every((k) => k === 2))) why = '你试过**全程都跨 2 级**吗？两大步就到顶了。';
+        else if (missing.some((r) => r.every((k) => k === 1))) why = '你试过**一级一级慢慢走**吗？四小步。';
+        else if (withOneTwo.length) why = `含一个 2 级的走法一共有 **3 条**：那一大步可以迈在开头、中间、结尾。你现在有 ${3 - withOneTwo.length} 条，还差 ${withOneTwo.length} 条。`;
+        else why = '再回去走走看。';
+        t.wrong(`你找到了 ${found.length} 条，还差 ${missing.length} 条。${why}`);
       }
     });
     await doneP;

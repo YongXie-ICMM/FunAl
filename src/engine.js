@@ -201,6 +201,23 @@
         return new Promise((resolve) => setup((v) => { if (!run.cancelled) resolve(v); }));
       },
       ask: {
+        /* After the hints run out and the learner is still stuck, let them out.
+           Being trapped on one screen is the worst outcome in a single-page lesson. */
+        offerWayOut(box, resolve, reveal) {
+          if (box.querySelector('.way-out')) return;
+          const row = el('div', 'btn-row reveal way-out');
+          const b = el('button', 'btn', '卡住了，给我答案，继续往下');
+          row.appendChild(b);
+          b.addEventListener('click', () => {
+            if (run.cancelled) return;
+            row.remove();
+            record({ kind: 'gave_up', prompt: run.prompt, answer: '看了答案' });
+            reveal();
+            clearPrompt();
+            resolve();
+          });
+          box.parentNode.insertBefore(row, box.nextSibling);
+        },
         /* Multiple choice with a correct answer. Resolves with the correct index once chosen. */
         async choice(prompt, options, opts = {}) {
           const g = guard(); if (g) return g;
@@ -208,6 +225,7 @@
           const correct = Array.isArray(opts.correct) ? opts.correct : [opts.correct];
           setPrompt(prompt, opts.hints);
           const box = append(el('div', 'choices reveal'));
+          let missed = 0;
           return new Promise((resolve) => {
             options.forEach((label, i) => {
               const b = el('button', '', md(label));
@@ -237,6 +255,14 @@
                     fb = '这个选项不对。回到上面的画面，对着数字再看一遍。';
                   }
                   t.wrong(fb);
+                  if (++missed >= (run.hints.length || 0) + 2) {
+                    t.ask.offerWayOut(box, () => resolve(correct[0]), () => {
+                      const right = box.querySelectorAll('button')[correct[0]];
+                      if (right) right.classList.add('right');
+                      box.querySelectorAll('button').forEach((x) => (x.disabled = true));
+                      if (opts.explainRight) t.right(typeof opts.explainRight === 'function' ? opts.explainRight(correct[0]) : opts.explainRight);
+                    });
+                  }
                 }
               });
               box.appendChild(b);
@@ -270,6 +296,7 @@
           const g = guard(); if (g) return g;
           if (prompt) await t.say(prompt, { pause: 120 });
           setPrompt(prompt, opts.hints);
+          let missed = 0;
           const row = append(el('div', 'numask reveal'));
           const input = el('input');
           input.type = 'number'; input.inputMode = 'numeric'; input.placeholder = opts.placeholder || '填一个数字';
@@ -299,6 +326,14 @@
                 if (!fb) fb = opts.defaultFeedback || `不是 ${v}。别急着猜，回到上面的画面，一个一个数。`;
                 t.wrong(fb);
                 input.value = ''; input.focus();
+                if (++missed >= (run.hints.length || 0) + 2) {
+                  t.ask.offerWayOut(row, () => resolve(accepted[0]), () => {
+                    input.value = String(accepted[0]);
+                    input.disabled = true; btn.disabled = true;
+                    if (opts.explainRight) t.right(typeof opts.explainRight === 'function' ? opts.explainRight(accepted[0]) : opts.explainRight);
+                    else t.right(`答案是 **${accepted[0]}${opts.unit || ''}**。别卡在这儿，往下走，后面还会再用到它。`);
+                  });
+                }
               }
             };
             btn.addEventListener('click', submit);
@@ -312,6 +347,7 @@
           if (prompt) await t.say(prompt, { pause: 120 });
           setPrompt(prompt, opts.hints);
           const want = (opts.correct || []).slice().sort().join(',');
+          let missed = 0;
           const box = append(el('div', 'choices reveal'));
           const picked = new Set();
           const btns = options.map((label, i) => {
@@ -345,6 +381,13 @@
               } else {
                 const fb = opts.feedback ? opts.feedback(got) : null;
                 t.wrong(fb || '这一组不对。看看漏了哪个，或者多选了哪个。');
+                if (++missed >= (run.hints.length || 0) + 2) {
+                  t.ask.offerWayOut(row, () => resolve((opts.correct || []).slice()), () => {
+                    btns.forEach((x, i) => { x.disabled = true; x.classList.toggle('right', (opts.correct || []).includes(i)); x.classList.toggle('picked', (opts.correct || []).includes(i)); });
+                    submit.remove();
+                    if (opts.explainRight) t.right(opts.explainRight);
+                  });
+                }
               }
             });
           });
@@ -355,6 +398,7 @@
           if (prompt) await t.say(prompt, { pause: 120 });
           setPrompt(prompt, opts.hints);
           const shuffled = opts.shuffled || items.map((_, i) => i).slice().reverse();
+          let missed = 0;
           const wrap = append(el('div', 'order reveal'));
           const slots = el('div', 'order-slots');
           const pool = el('div', 'order-pool');
@@ -370,6 +414,18 @@
                 const fb = opts.feedback ? opts.feedback(idx, next) : null;
                 t.wrong(fb || `这一句不是现在该放的。先想想：在做这一句之前，你必须先知道什么？`);
                 record({ kind: 'order', prompt, answer: items[idx], correct: false });
+                if (++missed >= (run.hints.length || 0) + 2) {
+                  t.ask.offerWayOut(wrap, () => resolve_(true), () => {
+                    while (next < items.length) {
+                      const slot = el('div', 'order-slot');
+                      slot.innerHTML = `<span class="n">${next + 1}</span>` + md(items[next]);
+                      slots.appendChild(slot);
+                      next++;
+                    }
+                    pool.innerHTML = '';
+                    if (opts.explainRight) t.right(opts.explainRight);
+                  });
+                }
                 return;
               }
               b.disabled = true;
@@ -402,7 +458,7 @@
           const rightCol = el('div', 'match-col');
           wrap.append(leftCol, rightCol);
           const rightOrder = opts.rightOrder || pairs.map((_, i) => i).slice().reverse();
-          let sel = null, done = 0;
+          let sel = null, done = 0, missed = 0;
           const lefts = pairs.map((p, i) => {
             const b = el('button', 'match-card', md(p.term));
             b.addEventListener('click', () => {
@@ -427,6 +483,14 @@
                 const fb = opts.feedback ? opts.feedback(pairs[li].term, p.did) : null;
                 t.wrong(fb || `「${pairs[li].term}」说的不是这件事。再看看你到底在哪一屏做过这个动作。`);
                 record({ kind: 'match', prompt, answer: pairs[li].term + ' → ' + p.did, correct: false });
+                if (++missed >= (run.hints.length || 0) + 3) {
+                  t.ask.offerWayOut(wrap, () => resolveAll(true), () => {
+                    leftCol.querySelectorAll('button').forEach((x) => { x.disabled = true; x.classList.add('right'); x.classList.remove('sel'); });
+                    rightCol.querySelectorAll('button').forEach((x) => { x.disabled = true; x.classList.add('right'); x.classList.remove('armed'); });
+                    const lines = pairs.map((q) => `**${q.term.replace(/\*/g, '')}** → ${q.did}`).join('\n\n');
+                    t.note('正确的对应', lines);
+                  });
+                }
                 return;
               }
               sel.disabled = true; sel.classList.remove('sel'); sel.classList.add('right');
