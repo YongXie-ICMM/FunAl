@@ -101,7 +101,10 @@ strong { font-weight: 700; }
 .note { background: var(--accent-soft); border-radius: var(--radius); padding: 14px 18px; border-left: 5px solid var(--accent); }
 .note .note-title { font-weight: 700; margin-bottom: 4px; }
 
-.canvas { background: var(--paper); border: 1px solid var(--line); border-radius: var(--radius); padding: 16px; box-shadow: var(--shadow); overflow-x: auto; }
+.canvas {
+  background: var(--paper); border: 1px solid var(--line); border-radius: var(--radius);
+  padding: 16px; box-shadow: var(--shadow); overflow-x: auto;
+}
 .block { }
 
 .choices { display: flex; flex-direction: column; gap: 10px; align-self: stretch; }
@@ -119,8 +122,12 @@ strong { font-weight: 700; }
 
 .numask { display: flex; gap: 10px; align-items: center; flex-wrap: wrap; }
 .numask input {
-  font: inherit; font-size: 1.15rem; width: 8em; padding: 10px 14px; border-radius: 12px; border: 1.5px solid var(--line); background: var(--paper); color: var(--ink);
+  font: inherit; font-size: 1.15rem; width: 8em; padding: 10px 14px; border-radius: 12px;
+  border: 1.5px solid var(--line); background: var(--paper); color: var(--ink);
+  -moz-appearance: textfield; appearance: textfield;
 }
+.numask input::-webkit-outer-spin-button,
+.numask input::-webkit-inner-spin-button { -webkit-appearance: none; margin: 0; }
 .numask input:focus { outline: 2px solid var(--accent); border-color: var(--accent); }
 .numask .unit { color: var(--muted); }
 .btn { border-radius: 999px; padding: 10px 20px; border: 1px solid var(--line); background: var(--paper); color: var(--ink); font-size: 1rem; }

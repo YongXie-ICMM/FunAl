@@ -18,8 +18,20 @@
 
   addStyle(`
   .w-stairs { display: flex; flex-direction: column; gap: 12px; }
-  .w-stairs-row { display: flex; align-items: flex-end; gap: 6px; padding: 8px 4px 0; min-height: 60px; }
-  .w-step { flex: 1 1 0; min-width: 54px; position: relative; display: flex; flex-direction: column; align-items: center; justify-content: flex-end;
+  .w-stairs-row {
+    display: flex; align-items: flex-end; gap: 6px; padding: 8px 4px 4px; min-height: 60px;
+    overflow-x: auto; overflow-y: hidden;
+    background-image:
+      linear-gradient(to right, var(--paper) 30%, transparent),
+      linear-gradient(to left,  var(--paper) 30%, transparent),
+      radial-gradient(farthest-side at 0 50%, rgba(0,0,0,.13), transparent),
+      radial-gradient(farthest-side at 100% 50%, rgba(0,0,0,.13), transparent);
+    background-position: 0 0, 100% 0, 0 0, 100% 0;
+    background-repeat: no-repeat;
+    background-size: 40px 100%, 40px 100%, 12px 100%, 12px 100%;
+    background-attachment: local, local, scroll, scroll;
+  }
+  .w-step { flex: 1 0 56px; min-width: 56px; max-width: 130px; position: relative; display: flex; flex-direction: column; align-items: center; justify-content: flex-end;
     background: var(--accent-soft); border: 1.5px solid var(--line); border-radius: 10px 10px 4px 4px; height: var(--h, 48px); transition: background .2s, border-color .2s; }
   .w-step .w-step-label { position: absolute; bottom: 6px; font-size: .78rem; color: var(--muted); white-space: nowrap; }
   .w-step .w-tag { position: absolute; top: -14px; right: -4px; background: var(--paper); border: 1.5px solid var(--warn); color: var(--warn); font-weight: 700; font-size: .78rem; padding: 0 6px; border-radius: 6px; line-height: 1.4; }
@@ -41,10 +53,20 @@
   .w-cost { font-weight: 700; color: var(--warn); }
   .w-extra { font-weight: 700; color: #c0392b; }
 
-  .w-cells { position: relative; }
+  .w-cells { overflow-x: auto; overflow-y: visible;
+    background-image:
+      linear-gradient(to right, var(--paper) 30%, transparent),
+      linear-gradient(to left,  var(--paper) 30%, transparent),
+      radial-gradient(farthest-side at 0 50%, rgba(0,0,0,.13), transparent),
+      radial-gradient(farthest-side at 100% 50%, rgba(0,0,0,.13), transparent);
+    background-position: 0 0, 100% 0, 0 0, 100% 0;
+    background-repeat: no-repeat;
+    background-size: 40px 100%, 40px 100%, 12px 100%, 12px 100%;
+    background-attachment: local, local, scroll, scroll; }
+  .w-cells-inner { position: relative; min-width: max-content; }
   .w-cells-title { font-weight: 600; margin-bottom: 8px; }
   .w-cells-row { display: flex; gap: 8px; align-items: flex-start; padding-top: 40px; }
-  .w-cell { flex: 1 1 0; min-width: 58px; display: flex; flex-direction: column; align-items: center; gap: 4px; }
+  .w-cell { flex: 1 0 62px; min-width: 62px; max-width: 140px; display: flex; flex-direction: column; align-items: center; gap: 4px; }
   .w-cell .w-cell-idx { font-size: .8rem; color: var(--ink); font-weight: 600; white-space: nowrap; }
   .w-cell .w-cell-val { width: 100%; min-height: 54px; border: 1.5px solid var(--line); border-radius: 10px; background: var(--paper); display: flex; align-items: center; justify-content: center; font-size: 1.25rem; font-weight: 700; transition: background .2s, border-color .2s; }
   .w-cell .w-cell-val.empty { color: var(--muted); font-weight: 400; }
@@ -57,7 +79,10 @@
   .w-cell .w-cell-val.pick-me { cursor: pointer; }
   .w-cell .w-cell-val.pick-me:hover { border-color: var(--accent); background: var(--accent-soft); }
   .w-cell .w-cell-val.bad-flash { border-color: var(--warn); background: var(--warn-soft); }
-  .w-cell .w-cell-val input { width: 100%; height: 100%; min-height: 50px; border: 0; background: transparent; text-align: center; font: inherit; font-size: 1.25rem; font-weight: 700; color: var(--ink); outline: none; }
+  .w-cell .w-cell-val input { width: 100%; min-width: 0; height: 100%; min-height: 50px; border: 0; background: transparent; text-align: center; font: inherit; font-size: 1.25rem; font-weight: 700; color: var(--ink); outline: none;
+    -moz-appearance: textfield; appearance: textfield; }
+  .w-cell .w-cell-val input::-webkit-outer-spin-button,
+  .w-cell .w-cell-val input::-webkit-inner-spin-button { -webkit-appearance: none; margin: 0; }
   .w-cell .w-cell-sub { font-size: .78rem; color: var(--warn); font-weight: 600; min-height: 1.2em; white-space: nowrap; }
   .w-cells svg.w-links { position: absolute; left: 0; top: 0; width: 100%; height: 100%; pointer-events: none; overflow: visible; }
   .w-cells svg.w-links path { fill: none; stroke: var(--accent); stroke-width: 2.2; }
@@ -246,8 +271,10 @@
   /* ---------------- cells (a DP row) ---------------- */
   function cells(container, opts) {
     const o = Object.assign({ n: 6, label: (i) => `第 ${i} 级`, sub: null, values: {}, title: '', placeholder: '?' }, opts);
-    const root = el('div', 'w-cells');
-    if (o.title) root.appendChild(el('div', 'w-cells-title', esc(o.title)));
+    const outer = el('div', 'w-cells');
+    if (o.title) outer.appendChild(el('div', 'w-cells-title', esc(o.title)));
+    const root = el('div', 'w-cells-inner');
+    outer.appendChild(root);
     const row = el('div', 'w-cells-row');
     const svg = document.createElementNS('http://www.w3.org/2000/svg', 'svg');
     svg.setAttribute('class', 'w-links');
@@ -265,10 +292,10 @@
       items.push({ c, v, sub });
     }
     root.appendChild(row);
-    container.appendChild(root);
+    container.appendChild(outer);
 
     const api = {
-      el: root, items,
+      el: outer, items,
       get(i) { return vals[i]; },
       set(i, value, cls) {
         vals[i] = value;
