@@ -62,6 +62,9 @@ FunAl.data = {
     realPath: [0, 1, 3, 5, 6],
     realSteps: [1, 2, 2, 1],
     realBreakdown: { toll: 12, penalty: 3 },
+    /* raise the fine and the cheapest ROUTE changes too, not just its price */
+    bigPenalty: { penalty: 30, best: 18, oldRouteNowCosts: 42,
+                  paths: [[0, 1, 2, 4, 5, 6], [0, 1, 3, 4, 6], [0, 2, 3, 5, 6]] },
     /* every route to stair 6, with the fine included, cheapest first */
     allRoutes: [
       { steps: [1, 2, 2, 1], toll: 12, penalty: 3, total: 15 },

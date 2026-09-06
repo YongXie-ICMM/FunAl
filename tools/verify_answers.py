@@ -261,6 +261,23 @@ def main():
     check("两行表 · 跨 2 级上来 broken.byTwo", b["byTwo"], conv(two))
     check("  两行表算出的答案 = 穷举答案", min(one[n], two[n]), rs[0]["total"])
 
+    bp = b["bigPenalty"]
+    big = broken_routes(tolls, bp["penalty"], n)
+
+    def to_path(steps):
+        pos, out = 0, [0]
+        for st in steps:
+            pos += st
+            out.append(pos)
+        return out
+
+    winners = sorted(to_path(r["steps"]) for r in big if r["total"] == big[0]["total"])
+    check("罚款调大后的最省 broken.bigPenalty.best", bp["best"], big[0]["total"])
+    check("罚款调大后达到最省的路线 broken.bigPenalty.paths", sorted(bp["paths"]), winners)
+    old_route = [r for r in big if to_path(r["steps"]) == b["realPath"]][0]
+    check("原来那条路在大罚款下要付 broken.bigPenalty.oldRouteNowCosts", bp["oldRouteNowCosts"], old_route["total"])
+    check("  罚款调大后最省路线确实换掉了（这一击才站得住）", b["realPath"] in winners, False)
+
     print(f"\n{len(ok)} 项通过，{len(bad)} 项失败。")
     if bad:
         print("失败项：" + "，".join(bad))
