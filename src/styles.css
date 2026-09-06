@@ -194,3 +194,13 @@ strong { font-weight: 700; }
 .match-card:disabled { cursor: default; }
 .shake { animation: shake .3s; }
 @media (max-width: 560px) { .match { flex-direction: column; } }
+
+.aside { border: 1px solid var(--line); border-radius: 12px; background: var(--paper); padding: 0 14px; }
+.aside > summary { cursor: pointer; padding: 11px 0; font-weight: 600; font-size: .95rem; color: var(--accent); list-style: none; }
+.aside > summary::-webkit-details-marker { display: none; }
+.aside > summary::before { content: "+ "; font-weight: 700; }
+.aside[open] > summary::before { content: "\2212 "; }
+.aside[open] > summary { border-bottom: 1px solid var(--line); }
+.aside-body { padding: 10px 0 14px; font-size: .95rem; }
+.aside-body p { margin: 0; }
+.aside-body p + p { margin-top: .6em; }

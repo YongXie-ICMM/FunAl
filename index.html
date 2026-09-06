@@ -203,6 +203,16 @@ strong { font-weight: 700; }
 .shake { animation: shake .3s; }
 @media (max-width: 560px) { .match { flex-direction: column; } }
 
+.aside { border: 1px solid var(--line); border-radius: 12px; background: var(--paper); padding: 0 14px; }
+.aside > summary { cursor: pointer; padding: 11px 0; font-weight: 600; font-size: .95rem; color: var(--accent); list-style: none; }
+.aside > summary::-webkit-details-marker { display: none; }
+.aside > summary::before { content: "+ "; font-weight: 700; }
+.aside[open] > summary::before { content: "\2212 "; }
+.aside[open] > summary { border-bottom: 1px solid var(--line); }
+.aside-body { padding: 10px 0 14px; font-size: .95rem; }
+.aside-body p { margin: 0; }
+.aside-body p + p { margin-top: .6em; }
+
 </style>
 </head>
 <body>
@@ -413,6 +423,16 @@ strong { font-weight: 700; }
       },
       right(text) { if (run.cancelled) return null; return append(el('div', 'bubble tutor right reveal', md(text))); },
       wrong(text) { if (run.cancelled) return null; return append(el('div', 'bubble tutor wrong reveal', md(text))); },
+      /* A collapsible aside: curious learners open it, everyone else walks past. */
+      aside(title, text) {
+        if (run.cancelled) return null;
+        const d = el('details', 'aside reveal');
+        const sum = el('summary', '', esc(title));
+        d.appendChild(sum);
+        d.appendChild(el('div', 'aside-body', md(text)));
+        d.addEventListener('toggle', () => { if (d.open) record({ kind: 'aside', prompt: title, answer: '展开了' }); });
+        return append(d);
+      },
       note(title, text) {
         if (run.cancelled) return null;
         return append(el('div', 'note reveal', (title ? `<div class="note-title">${esc(title)}</div>` : '') + md(text)));
@@ -496,6 +516,7 @@ strong { font-weight: 700; }
           const btn = el('button', 'btn primary', opts.button || '确定');
           row.append(input, unit, btn);
           setTimeout(() => input.focus({ preventScroll: true }), 80);
+          const free = opts.answer == null;              // a free prediction: any integer is accepted
           const accepted = Array.isArray(opts.answer) ? opts.answer : [opts.answer];
           return new Promise((resolve) => {
             const submit = () => {
@@ -504,8 +525,8 @@ strong { font-weight: 700; }
               if (raw === '' || !/^-?\d+$/.test(raw)) { input.focus(); return; }
               const v = Number(raw);
               t.learnerSays(String(v) + (opts.unit || ''));
-              const ok = accepted.includes(v);
-              record({ kind: 'number', prompt, answer: v, correct: ok });
+              const ok = free || accepted.includes(v);
+              record({ kind: 'number', prompt, answer: v, correct: free ? undefined : ok });
               if (ok) {
                 input.disabled = true; btn.disabled = true;
                 clearPrompt();
@@ -1447,29 +1468,282 @@ FunAl.data = {
 })();
 
 
-// ---- src/levels/00_smoke.js ----
+// ---- src/levels/01_hook.js ----
 FunAl.register({
-  id: 'smoke', title: '原语冒烟测试 3', goal: 'multi/order/match/recall', minutes: 1,
+  id: 'hook',
+  title: '先押一个数',
+  goal: '让学习者知道这门课要干什么，并留下一个属于自己的猜测，供后面对账。',
+  minutes: 2,
   async run(t) {
-    t.html('<div class="title-card"><h1>原语冒烟测试 3</h1></div>');
-    await t.ask.multi('最后一脚可能从哪几级踩上来？（可多选）', ['第 2 级', '第 3 级', '第 4 级'], {
-      correct: [0, 1],
-      feedback: (got) => got.includes(2) ? '第 4 级就是终点本身，不能从它踩到它。' : '还漏了一个来源。',
-      explainRight: '对，只有这两个来源。',
-      hints: ['一步只能走 1 级或 2 级。'],
+    t.html(`<div class="title-card">
+      <h1>动态规划，从一段楼梯开始</h1>
+      <p class="sub">不背公式。你会亲手算出每一个数字，最后再给你做过的事起名字。</p>
+    </div>`);
+
+    await t.say('手机地图算最快路线、输入法猜你下一个字、拼写检查把「recieve」改成「receive」——这些背后是同一个动作。');
+    await t.say('这个动作有个名字，叫**动态规划**。名字听着吓人，其实你今天就能自己把它做出来。');
+    await t.say('先看一段楼梯。规则只有一条：**每次只能上 1 级或者 2 级。**');
+
+    const box = t.canvas();
+    const st = FunAl.widgets.stairs(box, { n: 6, controls: true, emptyHint: '试着走上去，随便走。' });
+    let reached = false;
+    t.hints(['随便点「走 1 级」或者「走 2 级」，走到第 6 级就行。', '怎么走都可以，这一步没有对错。']);
+    await t.waitFor((resolve) => st.onStep((ev) => { if (ev.done && !reached) { reached = true; resolve(ev); } }));
+    t.clearHints();
+    st.enable(false);
+    t.learnerSays('走上去了：' + st.path.map((k) => '+' + k).join(' '));
+
+    await t.say('好。你刚才走的只是**其中一种**走法。');
+    await t.say('现在换个问题，这才是今天要解决的：\n\n**从地面走到第 6 级，一共有多少种不同的走法？**');
+
+    await t.ask.number('先押一个数。随便猜，猜错完全没关系——课程最后会拿你现在这个猜测来对账。', {
+      answer: null,
+      placeholder: '你猜几种？',
+      unit: ' 种',
+      button: '押上',
+      min: 1,
     });
-    await t.ask.order('把口诀排成正确顺序：', ['一、格子里写什么？', '二、最后一步有哪几种？', '三、起步格填几？'], {
-      shuffled: [2, 0, 1],
-      feedback: (idx, next) => `还不到这一句。第 ${next + 1} 句应该先回答的是更靠前的问题。`,
-      explainRight: '顺序对了。',
+    const bet = t.recallOne({ kind: 'number' });
+
+    await t.say(`记下了：**${bet.answer} 种**。`);
+    await t.say('接下来我不会告诉你答案。我们从一段更矮的楼梯开始，你自己数出来。');
+
+    t.done();
+  },
+});
+
+
+// ---- src/levels/02_count.js ----
+FunAl.register({
+  id: 'count4',
+  title: '亲手数一数',
+  goal: '让学习者亲手枚举出到第 4 级的 5 条走法，并确认「顺序不同就是不同走法」。',
+  minutes: 3,
+  async run(t) {
+    const D = FunAl.data.ways;
+    await t.say('楼梯缩短到 **4 级**。同样的规则：每次上 1 级或 2 级。');
+    await t.say('先说清楚一件事，不然后面全乱。');
+
+    await t.ask.choice('先走 1 级、再走 1 级、最后走 2 级（1+1+2），和先走 2 级、再走两次 1 级（2+1+1）——算同一种走法，还是两种？', [
+      '算两种。脚步的先后顺序不一样。',
+      '算一种。反正都是两个 1 和一个 2。',
+    ], {
+      correct: 0,
+      feedback: {
+        1: '想象你真的在爬这段楼梯：一种是先小步小步走、最后一大步跨上去；另一种是一上来就跨一大步。你的脚落在的台阶都不一样——第一种踩了第 1、2、4 级，第二种踩了第 2、3、4 级。踩过的台阶都不同，当然是两种走法。',
+      },
+      explainRight: '对。**一种走法 = 一整趟脚步的先后顺序。** 顺序不同就是不同的走法。',
+      hints: [
+        '别想公式，想你的脚。这两种走法，你的脚踩过的台阶一样吗？',
+        '第一种（1+1+2）踩了第 1、2、4 级。第二种（2+1+1）踩了第 2、3、4 级。',
+      ],
     });
-    await t.ask.match('把名字连到你做过的事：', [
-      { term: '状态', did: '每个格子代表的那道小题', explain: '对，状态就是「我在算哪道小题」。' },
-      { term: '转移', did: '一格是怎么由左边几格算出来的' },
-      { term: '边界', did: '不用算就知道答案的那几格' },
-    ], { rightOrder: [1, 2, 0] });
-    const guess = t.recallOne({ kind: 'multi' });
-    t.note('回头看', `你刚才多选题答的是「${guess.answer}」，一共记录了 ${t.recall().length} 次作答。`);
+
+    await t.say('好，现在你去数。走到第 4 级，每走成一趟，右边就多一张卡片。**走出重复的会被退回来。**');
+
+    const box = t.canvas();
+    const st = FunAl.widgets.stairs(box, { n: 4, controls: true, emptyHint: '从地面出发。' });
+    const found = [];
+    const chipBox = t.canvas();
+    chipBox.innerHTML = '<div class="small muted" style="margin-bottom:8px">已经找到的走法</div>';
+    const chips = FunAl.widgets.routeChips(chipBox, []);
+    const counter = t.el('div', 'small muted', '已找到 0 条');
+    chipBox.appendChild(counter);
+
+    let resolveDone;
+    const doneP = new Promise((r) => { resolveDone = r; });
+    const claimRow = t.el('div', 'btn-row');
+    const claimBtn = t.el('button', 'btn primary', '我找全了');
+    claimRow.appendChild(claimBtn);
+    chipBox.appendChild(claimRow);
+
+    st.onStep((ev) => {
+      if (!ev.done) return;
+      const key = ev.path.join('');
+      if (found.some((f) => f.join('') === key)) {
+        chips.chips[found.findIndex((f) => f.join('') === key)].classList.add('dup');
+        setTimeout(() => chips.chips.forEach((c) => c.classList.remove('dup')), 900);
+        t.wrong(`**${ev.path.map((k) => '+' + k).join(' ')}** 这条你已经走过了，看右边第 ${found.findIndex((f) => f.join('') === key) + 1} 张卡。换一条没走过的。`);
+      } else {
+        found.push(ev.path.slice());
+        chips.add(ev.path.slice());
+        counter.textContent = `已找到 ${found.length} 条`;
+      }
+      setTimeout(() => st.reset(), 700);
+    });
+
+    t.hints([
+      '还没走过的组合里，试试一上来就跨 2 级。',
+      '把你找到的卡片按「第一步走了几级」看一眼：第一步走 1 级的有几条？走 2 级的有几条？',
+      '第一步走 1 级的有 3 条，第一步走 2 级的有 2 条。',
+    ]);
+
+    claimBtn.addEventListener('click', () => {
+      if (found.length === D.table[4]) {
+        claimBtn.disabled = true;
+        t.clearHints();
+        resolveDone(true);
+      } else if (found.length < D.table[4]) {
+        t.wrong(`你找到了 ${found.length} 条，但还有没找到的。再想想：有没有哪种「先跨一大步」的走法你还没试过？`);
+      }
+    });
+    await doneP;
+
+    t.learnerSays(`我找全了，一共 ${found.length} 条`);
+    t.right(`**${D.table[4]} 条，一条不多一条不少。** 这是你自己一条条走出来的，不是谁告诉你的。`);
+
+    await t.say('把它们摆在一起看看：');
+    const allBox = t.canvas();
+    FunAl.widgets.routeChips(allBox, D.routes4);
+
+    await t.ask.predict('那到第 6 级呢？先猜猜，也是这样一条条数的话，你觉得要数多少条？', [
+      '十几条吧',
+      '几十条',
+      '上百条',
+    ]);
+    await t.say('到第 6 级是 **13 条**。还行。但楼梯再高一点，比如 30 级，就是 **1,346,269 条**——一秒钟数一条，你要数十五天。');
+    await t.say('所以一条条数这条路走不通。得找个别的办法。');
+
+    t.done();
+  },
+});
+
+
+// ---- src/levels/03_last_step.js ----
+FunAl.register({
+  id: 'laststep',
+  title: '最后一脚从哪来',
+  goal: '学习者亲手把 5 条路线按最后一步分成两堆，双向验证不重不漏，剪掉最后一步后看到两堆正好是两道更小的同类题。',
+  minutes: 4,
+  async run(t) {
+    const D = FunAl.data.ways;
+    const fmt = (r) => r.map((k, i) => (i === r.length - 1 ? `<span class="tail">+${k}</span>` : `+${k}`)).join(' ');
+
+    await t.say('一条条数走不通。那换个问法。');
+    await t.say('别管一整趟怎么走。**只看最后一脚。**');
+
+    await t.ask.multi('你已经站在第 4 级了。你的**最后一脚**，是从哪一级踩上来的？（可能不止一个答案）', [
+      '第 1 级', '第 2 级', '第 3 级', '第 4 级',
+    ], {
+      correct: [1, 2],
+      feedback: (got) => {
+        if (got.includes(3)) return '第 4 级就是你现在站的地方。你没法从第 4 级踩到第 4 级——那等于没动。';
+        if (got.includes(0)) return '从第 1 级踩到第 4 级要跨 3 级，一脚跨不了那么远。规则是一次最多 2 级。';
+        if (got.length === 1 && got[0] === 2) return '第 3 级对，但还有一个。一脚除了走 1 级，还能走几级？';
+        if (got.length === 1 && got[0] === 1) return '第 2 级对，但还有一个。一脚除了走 2 级，还能走几级？';
+        return '一脚只能走 1 级或 2 级。从第 4 级往回退 1 级、退 2 级，分别是哪两级？';
+      },
+      explainRight: '对。**只有两种可能：从第 3 级跨 1 级上来，或者从第 2 级跨 2 级上来。** 没有第三种。',
+      hints: [
+        '从第 4 级往回退。退 1 级到哪？退 2 级到哪？',
+        '一脚最多跨 2 级，所以往回最多退 2 级。',
+      ],
+    });
+
+    await t.say('那就把你刚才找到的 5 条路线，按**最后一脚**分成两堆。');
+    const bkBox = t.canvas();
+    const bk = FunAl.widgets.buckets(bkBox, {
+      cards: D.routes4,
+      buckets: ['最后一脚从第 3 级上来（+1）', '最后一脚从第 2 级上来（+2）'],
+      format: fmt,
+      answer: (r) => (r[r.length - 1] === 1 ? 0 : 1),
+      poolLabel: '点一张卡片，再点它该进的筐。橙色的那个数字就是最后一脚。',
+      onWrong: (r) => t.wrong(`这条路线的最后一脚是 **+${r[r.length - 1]}**，橙色标出来了。走 +${r[r.length - 1]} 才能上第 4 级的话，你得站在第 ${4 - r[r.length - 1]} 级。`),
+    });
+    t.hints(['看每张卡片最右边那个橙色的数字，它就是最后一脚。', '最后一脚是 +1 的进左筐，是 +2 的进右筐。']);
+    await t.waitFor((resolve) => { bkBox.addEventListener('click', function chk() { if (bk.counts()[0] + bk.counts()[1] === 5) { setTimeout(() => resolve(true), 300); bkBox.removeEventListener('click', chk); } }); });
+    t.clearHints();
+    t.right(`分完了：左筐 **${bk.counts()[0]} 条**，右筐 **${bk.counts()[1]} 条**。`);
+
+    await t.say('先别急着相加。得先确认这两个筐是**干净**的。两件事要查。');
+
+    await t.ask.choice('第一件：有没有哪条路线，**两个筐都能进**？', [
+      '没有。一条路线只有一个最后一脚。',
+      '有，有些路线两边都放得下。',
+    ], {
+      correct: 0,
+      feedback: { 1: '找一条试试看。任何一条路线，它的最后一个数字要么是 1，要么是 2，不可能同时是两个。所以它只能进一个筐。' },
+      explainRight: '对。所以**没有一条路线被数了两次**。',
+      hints: ['随便挑一条卡片，看它最后一个数字。它能同时是 1 又是 2 吗？'],
+    });
+
+    await t.ask.choice('第二件，反过来问：有没有哪条到第 4 级的路线，**两个筐都进不去**、被漏掉了？', [
+      '没有。任何一条路都得有最后一脚，而最后一脚只能是 +1 或 +2。',
+      '可能有，我们只是没找到而已。',
+    ], {
+      correct: 0,
+      feedback: {
+        1: '假设真有这么一条被漏掉的路。它总得走到第 4 级吧？那它的最后一脚是几级？只能是 1 或 2。是 1 就该在左筐，是 2 就该在右筐。所以它漏不掉。',
+      },
+      explainRight: '对。**每条路都有最后一脚，最后一脚只有两种，所以一条也漏不掉。**',
+      hints: ['假设真有一条被漏掉的路，它走到第 4 级的最后一脚是几级？', '最后一脚只能是 1 级或 2 级。是 1 就该在左筐，是 2 就该在右筐。哪儿也去不了的路存在吗？'],
+    });
+
+    t.note('不重也不漏', '两个筐**没有重复**、也**没有遗漏**。到这一步，两个筐里的数量才可以放心相加。');
+
+    await t.say('现在做一件事：**把每张卡片的最后一脚剪掉。** 看看剩下什么。');
+    await t.ask.confirm('剪掉最后一脚');
+    bk.cutTails();
+    await t.pause(600);
+
+    await t.say('左筐那 3 条，剪掉 +1 之后，剩下的是 **+1+1+1、+1+2、+2+1**——这是三条走到**第 3 级**的路。');
+    await t.say('右筐那 2 条，剪掉 +2 之后，剩下的是 **+1+1、+2**——这是两条走到**第 2 级**的路。');
+
+    await t.say('可它们是**全部**吗？左筐剪完只有 3 条，会不会到第 3 级其实有第 4 条路，只是没出现在这儿？自己去找一下。');
+
+    const box3 = t.canvas();
+    box3.innerHTML = '<div class="small muted" style="margin-bottom:6px">这是一段 3 级的楼梯。去找第 4 条路。</div>';
+    const st3 = FunAl.widgets.stairs(box3, { n: 3, controls: true, emptyHint: '走走看。' });
+    const found3 = [];
+    const chip3 = FunAl.widgets.routeChips(box3, []);
+    const note3 = t.el('div', 'small muted', '找到 0 条');
+    box3.appendChild(note3);
+    const row3 = t.el('div', 'btn-row');
+    const giveUp = t.el('button', 'btn', '找不到第 4 条了');
+    row3.appendChild(giveUp);
+    box3.appendChild(row3);
+    st3.onStep((ev) => {
+      if (!ev.done) return;
+      const key = ev.path.join('');
+      if (found3.some((f) => f.join('') === key)) t.wrong(`**${ev.path.map((k) => '+' + k).join(' ')}** 这条刚走过。`);
+      else { found3.push(ev.path.slice()); chip3.add(ev.path.slice()); note3.textContent = `找到 ${found3.length} 条`; }
+      setTimeout(() => st3.reset(), 600);
+    });
+    t.hints(['3 级楼梯，一次 1 级或 2 级。把能想到的都走一遍。', '试试 +1+1+1、+1+2、+2+1。还有第四种吗？']);
+    await t.waitFor((resolve) => giveUp.addEventListener('click', () => {
+      if (found3.length < 3) { t.wrong(`你才找到 ${found3.length} 条，还没找全呢。到第 3 级至少有 3 条。`); return; }
+      giveUp.disabled = true; st3.enable(false); resolve(true);
+    }));
+    t.clearHints();
+    t.learnerSays('找不到第 4 条');
+    t.right('找不到，因为**真的只有 3 条**。左筐剪完剩下的那 3 条，就是到第 3 级的全部走法，一条不多一条不少。');
+
+    await t.say('反过来也成立：随便拿一条到第 3 级的路，末尾接上 +1，它就变成一条到第 4 级、最后一脚是 +1 的路。**一对一，两边严丝合缝。**');
+
+    t.note('你自己推出来的', '**到第 4 级的走法数 = 到第 3 级的走法数 + 到第 2 级的走法数**\n\n也就是 **5 = 3 + 2**。\n\n这不是我告诉你的公式，是你把 5 张卡片分了两堆、又剪掉最后一脚看出来的。');
+
+    await t.ask.choice('顺手问一句：刚才我们按「最后一脚」分。那按「**第一脚**」分行不行？', [
+      '也行，一样能分成不重不漏的两堆。',
+      '不行，只有最后一脚能分。',
+    ], {
+      correct: 0,
+      feedback: {
+        1: '真的试一下：第一脚走 1 级的有 3 条，走 2 级的有 2 条。也是不重不漏。所以按第一脚分**确实也行**。别人告诉你「必须看最后一步」的时候，这句话其实说得太满了。',
+      },
+      explainRight: '对，按第一脚分**也是**不重不漏的。这里没有骗你。',
+      hints: ['自己数一下：这 5 条里，第一脚走 1 级的有几条？走 2 级的有几条？'],
+    });
+
+    await t.say('那为什么大家都说「看最后一步」？关键不在分得干不干净，**在于剪掉之后剩下的是什么。**');
+    await t.say('剪掉**最后**一脚，剩下的是「从地面走到第 3 级」——和原来那道题一模一样，只是数字变小了。你可以直接接着往下问。');
+    await t.say('剪掉**第一**脚，剩下的是「从第 1 级走到第 4 级」。它不是原来那道题，你得先说服自己「这跟从地面走到第 3 级是一回事」。这段楼梯上确实是一回事，因为每级台阶都长得一样。');
+    await t.say('但等一下你会遇到一段**每级价钱都不一样**的楼梯。到那时，「从第 1 级出发」和「从地面出发」就不再是同一道题了，按第一脚分当场散架。');
+
+    t.note('真正的判据', '不是「必须看最后一步」，而是：\n\n**剪掉那一步之后，剩下的必须还是同一道题，只是数字更小。**\n\n看最后一步之所以好用，是因为它剪完剩下的永远是「从地面到第 k 级」，永远是原题本身。');
+
+    t.aside('深入一点：那按「用了几个 2 级」来分呢？', '也能分干净：用 0 个 2 的有 1 条，用 1 个 2 的有 3 条，用 2 个 2 的有 1 条。1 + 3 + 1 = 5，没错。\n\n可是剪掉之后剩下什么？不是一道更小的同类题，而是一道全新的题（「用 1 个 2 走到第 4 级有几种」）。它没法接着往下拆，套娃断在这里。\n\n所以分法可以有很多种，能用的只有那些**剪完还剩同一道题**的分法。');
+
+    await t.say('下一屏，你会用这条规律一路往上算——但先得填一个很多人会填错的格子。');
     t.done();
   },
 });

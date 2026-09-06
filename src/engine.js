@@ -176,6 +176,16 @@
       },
       right(text) { if (run.cancelled) return null; return append(el('div', 'bubble tutor right reveal', md(text))); },
       wrong(text) { if (run.cancelled) return null; return append(el('div', 'bubble tutor wrong reveal', md(text))); },
+      /* A collapsible aside: curious learners open it, everyone else walks past. */
+      aside(title, text) {
+        if (run.cancelled) return null;
+        const d = el('details', 'aside reveal');
+        const sum = el('summary', '', esc(title));
+        d.appendChild(sum);
+        d.appendChild(el('div', 'aside-body', md(text)));
+        d.addEventListener('toggle', () => { if (d.open) record({ kind: 'aside', prompt: title, answer: '展开了' }); });
+        return append(d);
+      },
       note(title, text) {
         if (run.cancelled) return null;
         return append(el('div', 'note reveal', (title ? `<div class="note-title">${esc(title)}</div>` : '') + md(text)));
@@ -259,6 +269,7 @@
           const btn = el('button', 'btn primary', opts.button || '确定');
           row.append(input, unit, btn);
           setTimeout(() => input.focus({ preventScroll: true }), 80);
+          const free = opts.answer == null;              // a free prediction: any integer is accepted
           const accepted = Array.isArray(opts.answer) ? opts.answer : [opts.answer];
           return new Promise((resolve) => {
             const submit = () => {
@@ -267,8 +278,8 @@
               if (raw === '' || !/^-?\d+$/.test(raw)) { input.focus(); return; }
               const v = Number(raw);
               t.learnerSays(String(v) + (opts.unit || ''));
-              const ok = accepted.includes(v);
-              record({ kind: 'number', prompt, answer: v, correct: ok });
+              const ok = free || accepted.includes(v);
+              record({ kind: 'number', prompt, answer: v, correct: free ? undefined : ok });
               if (ok) {
                 input.disabled = true; btn.disabled = true;
                 clearPrompt();
