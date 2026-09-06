@@ -6,7 +6,7 @@
 
 Template placeholders in src/index.template.html:
     <!--__CSS__-->   -> <style> src/styles.css </style>
-    <!--__JS__-->    -> <script> engine.js + widgets.js + levels/*.js (sorted) + main.js </script>
+    <!--__JS__-->    -> <script> engine.js + data.js + widgets.js + levels/*.js (sorted) + main.js </script>
 """
 import argparse
 import sys
@@ -23,8 +23,9 @@ def read(p):
 
 def js_bundle():
     parts = [SRC / "engine.js"]
-    if (SRC / "widgets.js").is_file():
-        parts.append(SRC / "widgets.js")
+    for extra in ("data.js", "widgets.js"):
+        if (SRC / extra).is_file():
+            parts.append(SRC / extra)
     parts += sorted((SRC / "levels").glob("*.js"))
     parts.append(SRC / "main.js")
     chunks = []

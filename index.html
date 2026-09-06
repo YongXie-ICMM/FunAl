@@ -170,6 +170,39 @@ strong { font-weight: 700; }
 }
 @media print { .dock, .topbar, .mentor { display: none !important; } }
 
+/* ---------- multi / order / match ---------- */
+.choices button.multi { padding-left: 44px; position: relative; }
+.choices button.multi::before {
+  content: ""; position: absolute; left: 14px; top: 50%; transform: translateY(-50%);
+  width: 20px; height: 20px; border: 2px solid var(--line); border-radius: 6px; background: var(--paper);
+}
+.choices button.multi.picked::before { border-color: var(--accent); background: var(--accent); }
+.choices button.multi.picked::after {
+  content: ""; position: absolute; left: 20px; top: 50%; width: 5px; height: 10px;
+  border: solid #fff; border-width: 0 2.5px 2.5px 0; transform: translateY(-65%) rotate(45deg);
+}
+
+.order { display: flex; flex-direction: column; gap: 12px; }
+.order-slots { display: flex; flex-direction: column; gap: 8px; }
+.order-slot { display: flex; gap: 10px; align-items: baseline; background: var(--ok-soft); border: 1.5px solid var(--ok); border-radius: 12px; padding: 10px 14px; animation: rise .3s ease-out; }
+.order-slot .n { font-weight: 700; color: var(--ok); }
+.order-slot p { margin: 0; }
+.order-pool { display: flex; flex-direction: column; gap: 8px; }
+.order-card { text-align: left; padding: 11px 14px; border-radius: 12px; border: 1.5px solid var(--line); background: var(--paper); color: var(--ink); font-size: 1rem; }
+.order-card:hover:not(:disabled) { border-color: var(--accent); background: var(--accent-soft); }
+.order-card p { margin: 0; }
+
+.match { display: flex; gap: 12px; align-items: flex-start; }
+.match-col { flex: 1 1 0; min-width: 0; display: flex; flex-direction: column; gap: 8px; }
+.match-card { text-align: left; padding: 10px 12px; border-radius: 12px; border: 1.5px solid var(--line); background: var(--paper); color: var(--ink); font-size: .95rem; line-height: 1.5; }
+.match-card p { margin: 0; }
+.match-card.sel { border-color: var(--accent); background: var(--accent-soft); box-shadow: 0 0 0 3px var(--accent-soft); }
+.match-card.armed { border-style: dashed; border-color: var(--accent); }
+.match-card.right { border-color: var(--ok); background: var(--ok-soft); }
+.match-card:disabled { cursor: default; }
+.shake { animation: shake .3s; }
+@media (max-width: 560px) { .match { flex-direction: column; } }
+
 </style>
 </head>
 <body>
@@ -489,6 +522,143 @@ strong { font-weight: 700; }
             input.addEventListener('keydown', (e) => { if (e.key === 'Enter') { e.preventDefault(); submit(); } });
           });
         },
+
+        /* Multiple-select: the learner ticks several options, then submits. */
+        async multi(prompt, options, opts = {}) {
+          const g = guard(); if (g) return g;
+          if (prompt) await t.say(prompt, { pause: 120 });
+          setPrompt(prompt, opts.hints);
+          const want = (opts.correct || []).slice().sort().join(',');
+          const box = append(el('div', 'choices reveal'));
+          const picked = new Set();
+          const btns = options.map((label, i) => {
+            const b = el('button', 'multi', md(label));
+            b.addEventListener('click', () => {
+              if (run.cancelled || b.disabled) return;
+              if (picked.has(i)) { picked.delete(i); b.classList.remove('picked'); }
+              else { picked.add(i); b.classList.add('picked'); }
+              submit.disabled = picked.size === 0;
+            });
+            box.appendChild(b);
+            return b;
+          });
+          const row = append(el('div', 'btn-row reveal'));
+          const submit = el('button', 'btn primary', opts.button || '就选这些');
+          submit.disabled = true;
+          row.appendChild(submit);
+          return new Promise((resolve) => {
+            submit.addEventListener('click', () => {
+              if (run.cancelled) return;
+              const got = [...picked].sort();
+              t.learnerSays(got.length ? got.map((i) => options[i]).join('、') : '一个都不选');
+              const ok = got.join(',') === want;
+              record({ kind: 'multi', prompt, answer: got.map((i) => options[i]).join('、'), correct: ok });
+              if (ok) {
+                btns.forEach((b, i) => { b.disabled = true; if (picked.has(i)) b.classList.add('right'); });
+                submit.remove();
+                clearPrompt();
+                if (opts.explainRight) t.right(opts.explainRight);
+                resolve(got);
+              } else {
+                const fb = opts.feedback ? opts.feedback(got) : null;
+                t.wrong(fb || '这一组不对。看看漏了哪个，或者多选了哪个。');
+              }
+            });
+          });
+        },
+        /* Put shuffled cards into the right order by tapping them one at a time. */
+        async order(prompt, items, opts = {}) {
+          const g = guard(); if (g) return g;
+          if (prompt) await t.say(prompt, { pause: 120 });
+          setPrompt(prompt, opts.hints);
+          const shuffled = opts.shuffled || items.map((_, i) => i).slice().reverse();
+          const wrap = append(el('div', 'order reveal'));
+          const slots = el('div', 'order-slots');
+          const pool = el('div', 'order-pool');
+          wrap.append(slots, pool);
+          let next = 0;
+          const btns = shuffled.map((idx) => {
+            const b = el('button', 'order-card', md(items[idx]));
+            b.addEventListener('click', () => {
+              if (run.cancelled || b.disabled) return;
+              if (idx !== next) {
+                b.classList.add('shake');
+                setTimeout(() => b.classList.remove('shake'), 320);
+                const fb = opts.feedback ? opts.feedback(idx, next) : null;
+                t.wrong(fb || `这一句不是现在该放的。先想想：在做这一句之前，你必须先知道什么？`);
+                record({ kind: 'order', prompt, answer: items[idx], correct: false });
+                return;
+              }
+              b.disabled = true;
+              b.classList.add('placed');
+              const slot = el('div', 'order-slot');
+              slot.innerHTML = `<span class="n">${next + 1}</span>` + md(items[idx]);
+              slots.appendChild(slot);
+              b.remove();
+              next++;
+              if (next === items.length) {
+                record({ kind: 'order', prompt, answer: '顺序全对', correct: true });
+                clearPrompt();
+                if (opts.explainRight) t.right(opts.explainRight);
+                resolve_(true);
+              }
+            });
+            pool.appendChild(b);
+            return b;
+          });
+          let resolve_;
+          return new Promise((r) => { resolve_ = r; });
+        },
+        /* Match each term on the left to the thing the learner actually did, on the right. */
+        async match(prompt, pairs, opts = {}) {
+          const g = guard(); if (g) return g;
+          if (prompt) await t.say(prompt, { pause: 120 });
+          setPrompt(prompt, opts.hints);
+          const wrap = append(el('div', 'match reveal'));
+          const leftCol = el('div', 'match-col');
+          const rightCol = el('div', 'match-col');
+          wrap.append(leftCol, rightCol);
+          const rightOrder = opts.rightOrder || pairs.map((_, i) => i).slice().reverse();
+          let sel = null, done = 0;
+          const lefts = pairs.map((p, i) => {
+            const b = el('button', 'match-card', md(p.term));
+            b.addEventListener('click', () => {
+              if (run.cancelled || b.disabled) return;
+              if (sel) sel.classList.remove('sel');
+              sel = b; b.classList.add('sel');
+              rightCol.querySelectorAll('button:not(:disabled)').forEach((r) => r.classList.add('armed'));
+            });
+            b.dataset.i = i;
+            leftCol.appendChild(b);
+            return b;
+          });
+          rightOrder.forEach((i) => {
+            const p = pairs[i];
+            const b = el('button', 'match-card', md(p.did));
+            b.addEventListener('click', () => {
+              if (run.cancelled || b.disabled || !sel) return;
+              const li = Number(sel.dataset.i);
+              if (li !== i) {
+                b.classList.add('shake');
+                setTimeout(() => b.classList.remove('shake'), 320);
+                const fb = opts.feedback ? opts.feedback(pairs[li].term, p.did) : null;
+                t.wrong(fb || `「${pairs[li].term}」说的不是这件事。再看看你到底在哪一屏做过这个动作。`);
+                record({ kind: 'match', prompt, answer: pairs[li].term + ' → ' + p.did, correct: false });
+                return;
+              }
+              sel.disabled = true; sel.classList.remove('sel'); sel.classList.add('right');
+              b.disabled = true; b.classList.add('right');
+              rightCol.querySelectorAll('button').forEach((r) => r.classList.remove('armed'));
+              sel = null;
+              record({ kind: 'match', prompt, answer: p.term + ' → ' + p.did, correct: true });
+              if (p.explain) t.right(p.explain);
+              if (++done === pairs.length) { clearPrompt(); resolveAll(true); }
+            });
+            rightCol.appendChild(b);
+          });
+          let resolveAll;
+          return new Promise((r) => { resolveAll = r; });
+        },
         /* A single button the learner presses when ready. */
         async confirm(label, opts = {}) {
           const g = guard(); if (g) return g;
@@ -505,6 +675,17 @@ strong { font-weight: 700; }
           });
         },
       },
+      /* Look back at what the learner answered earlier (used by the recap screen). */
+      recall(filter) {
+        return state.log.filter((e) => {
+          if (!filter) return true;
+          if (filter.screen && e.screen !== filter.screen) return false;
+          if (filter.kind && e.kind !== filter.kind) return false;
+          if (filter.promptIncludes && !(e.prompt || '').includes(filter.promptIncludes)) return false;
+          return true;
+        });
+      },
+      recallOne(filter) { const l = t.recall(filter); return l.length ? l[l.length - 1] : null; },
       done(opts = {}) {
         if (run.cancelled) return;
         state.completed.add(run.screen.id);
@@ -639,6 +820,62 @@ strong { font-weight: 700; }
 
   window.FunAl = { register, start, showScreen, state, screens, el, md, esc, addStyle, sleep, Mentor };
 })();
+
+
+// ---- src/data.js ----
+/* All numbers the course shows the learner. Verified by tools/verify_answers.py --
+ * run that script after changing anything here. */
+FunAl.data = {
+  /* ---- problem 1: how many ways up, 1 or 2 stairs at a time ---- */
+  ways: {
+    table: [1, 1, 2, 3, 5, 8, 13, 21, 34, 55, 89, 144, 233],   // ways[i] = 到第 i 级的走法数
+    routes4: [[1, 1, 1, 1], [2, 1, 1], [1, 2, 1], [1, 1, 2], [2, 2]],          // 全部 5 条
+    routes3: [[1, 1, 1], [2, 1], [1, 2]],                                       // 全部 3 条
+    routes2: [[1, 1], [2]],                                                     // 全部 2 条
+    /* 没记性地拆：屏幕上长出的问题卡张数 / 学习者需要点开的次数 */
+    naive: { 4: { cards: 9, clicks: 4 }, 6: { cards: 25, clicks: 12 }, 8: { cards: 67, clicks: 33 },
+             10: { cards: 177, clicks: 88 }, 20: { cards: 21891, clicks: 10945 }, 30: { cards: 2692537, clicks: 1346268 } },
+    /* 有账本：真正算过的次数 = 不同的小问题个数，和点开顺序无关 */
+    memoComputes: { 4: 3, 6: 5, 8: 7, 10: 9, 20: 19, 30: 29 },
+  },
+
+  /* ---- problem 2: cheapest way up a toll staircase (6 stairs, ground is free) ---- */
+  toll: {
+    tolls: [0, 1, 8, 1, 1, 5, 6],          // tolls[i] = 踩上第 i 级要付的钱
+    best: [0, 1, 8, 2, 3, 7, 9],           // best[i] = 到第 i 级最少花多少
+    from: [null, 0, 0, 1, 3, 3, 4],        // from[i] = 最省时是从第几级来的（第 2 级是从地面一步跨 2 级上来的）
+    bestPath: [0, 1, 3, 4, 6],             // 唯一的最省路线，共 9 元
+    bestCost: 9,
+    greedy: { path: [0, 1, 3, 4, 5, 6], cost: 14,
+      trap: '在第 4 级时，第 5 级要 5 元、第 6 级要 6 元，挑了眼前便宜的 5 元，结果还得再付 6 元，一共 11 元；直接跳到第 6 级只要 6 元。' },
+  },
+
+  /* ---- problem 3 (transfer): fewest coins to make 6 with 1, 3, 4 ---- */
+  coins: {
+    values: [1, 3, 4], target: 6,
+    table: [0, 1, 2, 1, 1, 2, 2],          // table[a] = 凑 a 元最少几枚
+    from: [null, 0, 1, 0, 0, 4, 3],        // from[a] = 最省时的上一格
+    bestCoins: [3, 3], best: 2,
+    greedyBig: { coins: [4, 1, 1], count: 3 },   // 先拿最大面值会用 3 枚
+    unreachable: { values: [3, 4], target: 5, table: [0, null, null, 1, 1, null, 2, 2, 2] },  // null = 凑不出
+  },
+
+  /* ---- the counterexample: when one number per cell is not enough ---- */
+  broken: {
+    tolls: [0, 9, 1, 9, 1], penalty: 10, n: 4,
+    rule: '连着走两次 2 级要罚 10 元',
+    naiveTable: [0, 9, 1, 10, 2],          // 只记「我在第几级」算出来的表
+    naiveClaim: 2,
+    realBest: 11, realPath: [1, 1, 2],
+    allRoutes: [                            // 到第 4 级的全部 5 条走法，含罚款
+      { steps: [1, 1, 2], toll: 11, penalty: 0, total: 11 },
+      { steps: [2, 1, 1], toll: 11, penalty: 0, total: 11 },
+      { steps: [2, 2], toll: 2, penalty: 10, total: 12 },
+      { steps: [1, 2, 1], toll: 19, penalty: 0, total: 19 },
+      { steps: [1, 1, 1, 1], toll: 20, penalty: 0, total: 20 },
+    ],
+  },
+};
 
 
 // ---- src/widgets.js ----
@@ -1212,28 +1449,27 @@ strong { font-weight: 700; }
 
 // ---- src/levels/00_smoke.js ----
 FunAl.register({
-  id: 'smoke', title: '控件冒烟测试 2', goal: 'tree/buckets/notebook smoke', minutes: 1,
+  id: 'smoke', title: '原语冒烟测试 3', goal: 'multi/order/match/recall', minutes: 1,
   async run(t) {
-    t.html('<div class="title-card"><h1>控件冒烟测试 2</h1></div>');
-    await t.say('分桶：把 5 条路线按最后一步分开。');
-    const routes = [[1,1,1,1],[1,1,2],[1,2,1],[2,1,1],[2,2]];
-    const bk = FunAl.widgets.buckets(t.canvas(), {
-      cards: routes, buckets: ['最后一步 +1（从第 3 级来）', '最后一步 +2（从第 2 级来）'],
-      format: (r) => r.map((k) => `+${k}`).join(' ').replace(/(\+\d)$/, '<span class="tail">$1</span>'),
-      answer: (r) => (r[r.length - 1] === 1 ? 0 : 1),
-      onWrong: () => t.wrong('这条路线的最后一个数字不是这个。'),
+    t.html('<div class="title-card"><h1>原语冒烟测试 3</h1></div>');
+    await t.ask.multi('最后一脚可能从哪几级踩上来？（可多选）', ['第 2 级', '第 3 级', '第 4 级'], {
+      correct: [0, 1],
+      feedback: (got) => got.includes(2) ? '第 4 级就是终点本身，不能从它踩到它。' : '还漏了一个来源。',
+      explainRight: '对，只有这两个来源。',
+      hints: ['一步只能走 1 级或 2 级。'],
     });
-    await t.waitFor((resolve) => { bk.el.dataset.k = 1; const o = bk; const orig = o; setTimeout(function chk(){ if (o.counts()[0] + o.counts()[1] === 5) resolve(true); else setTimeout(chk, 200); }, 200); });
-    t.right(`分完了：${bk.counts()[0]} 条 + ${bk.counts()[1]} 条`);
-    await t.say('递归树 + 账本：点开问题卡。');
-    const side = t.canvas(); side.className += ' w-side';
-    const treeBox = document.createElement('div');
-    const bookBox = document.createElement('div');
-    side.append(treeBox, bookBox);
-    const book = FunAl.widgets.notebook(bookBox, { title: '账本', rows: [2,3,4,5,6] });
-    const tr = FunAl.widgets.tree(treeBox, { root: 6, memo: true, book });
-    await t.waitFor((resolve) => tr.on((ev) => { if (ev.kind === 'solved' && ev.n === 6) resolve(ev.value); }));
-    t.note('结果', `根节点 = ${tr.value}；真正算过 ${tr.stats.computed} 次，抄账本 ${tr.stats.lookups} 次。`);
+    await t.ask.order('把口诀排成正确顺序：', ['一、格子里写什么？', '二、最后一步有哪几种？', '三、起步格填几？'], {
+      shuffled: [2, 0, 1],
+      feedback: (idx, next) => `还不到这一句。第 ${next + 1} 句应该先回答的是更靠前的问题。`,
+      explainRight: '顺序对了。',
+    });
+    await t.ask.match('把名字连到你做过的事：', [
+      { term: '状态', did: '每个格子代表的那道小题', explain: '对，状态就是「我在算哪道小题」。' },
+      { term: '转移', did: '一格是怎么由左边几格算出来的' },
+      { term: '边界', did: '不用算就知道答案的那几格' },
+    ], { rightOrder: [1, 2, 0] });
+    const guess = t.recallOne({ kind: 'multi' });
+    t.note('回头看', `你刚才多选题答的是「${guess.answer}」，一共记录了 ${t.recall().length} 次作答。`);
     t.done();
   },
 });

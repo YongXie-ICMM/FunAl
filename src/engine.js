@@ -285,6 +285,143 @@
             input.addEventListener('keydown', (e) => { if (e.key === 'Enter') { e.preventDefault(); submit(); } });
           });
         },
+
+        /* Multiple-select: the learner ticks several options, then submits. */
+        async multi(prompt, options, opts = {}) {
+          const g = guard(); if (g) return g;
+          if (prompt) await t.say(prompt, { pause: 120 });
+          setPrompt(prompt, opts.hints);
+          const want = (opts.correct || []).slice().sort().join(',');
+          const box = append(el('div', 'choices reveal'));
+          const picked = new Set();
+          const btns = options.map((label, i) => {
+            const b = el('button', 'multi', md(label));
+            b.addEventListener('click', () => {
+              if (run.cancelled || b.disabled) return;
+              if (picked.has(i)) { picked.delete(i); b.classList.remove('picked'); }
+              else { picked.add(i); b.classList.add('picked'); }
+              submit.disabled = picked.size === 0;
+            });
+            box.appendChild(b);
+            return b;
+          });
+          const row = append(el('div', 'btn-row reveal'));
+          const submit = el('button', 'btn primary', opts.button || '就选这些');
+          submit.disabled = true;
+          row.appendChild(submit);
+          return new Promise((resolve) => {
+            submit.addEventListener('click', () => {
+              if (run.cancelled) return;
+              const got = [...picked].sort();
+              t.learnerSays(got.length ? got.map((i) => options[i]).join('、') : '一个都不选');
+              const ok = got.join(',') === want;
+              record({ kind: 'multi', prompt, answer: got.map((i) => options[i]).join('、'), correct: ok });
+              if (ok) {
+                btns.forEach((b, i) => { b.disabled = true; if (picked.has(i)) b.classList.add('right'); });
+                submit.remove();
+                clearPrompt();
+                if (opts.explainRight) t.right(opts.explainRight);
+                resolve(got);
+              } else {
+                const fb = opts.feedback ? opts.feedback(got) : null;
+                t.wrong(fb || '这一组不对。看看漏了哪个，或者多选了哪个。');
+              }
+            });
+          });
+        },
+        /* Put shuffled cards into the right order by tapping them one at a time. */
+        async order(prompt, items, opts = {}) {
+          const g = guard(); if (g) return g;
+          if (prompt) await t.say(prompt, { pause: 120 });
+          setPrompt(prompt, opts.hints);
+          const shuffled = opts.shuffled || items.map((_, i) => i).slice().reverse();
+          const wrap = append(el('div', 'order reveal'));
+          const slots = el('div', 'order-slots');
+          const pool = el('div', 'order-pool');
+          wrap.append(slots, pool);
+          let next = 0;
+          const btns = shuffled.map((idx) => {
+            const b = el('button', 'order-card', md(items[idx]));
+            b.addEventListener('click', () => {
+              if (run.cancelled || b.disabled) return;
+              if (idx !== next) {
+                b.classList.add('shake');
+                setTimeout(() => b.classList.remove('shake'), 320);
+                const fb = opts.feedback ? opts.feedback(idx, next) : null;
+                t.wrong(fb || `这一句不是现在该放的。先想想：在做这一句之前，你必须先知道什么？`);
+                record({ kind: 'order', prompt, answer: items[idx], correct: false });
+                return;
+              }
+              b.disabled = true;
+              b.classList.add('placed');
+              const slot = el('div', 'order-slot');
+              slot.innerHTML = `<span class="n">${next + 1}</span>` + md(items[idx]);
+              slots.appendChild(slot);
+              b.remove();
+              next++;
+              if (next === items.length) {
+                record({ kind: 'order', prompt, answer: '顺序全对', correct: true });
+                clearPrompt();
+                if (opts.explainRight) t.right(opts.explainRight);
+                resolve_(true);
+              }
+            });
+            pool.appendChild(b);
+            return b;
+          });
+          let resolve_;
+          return new Promise((r) => { resolve_ = r; });
+        },
+        /* Match each term on the left to the thing the learner actually did, on the right. */
+        async match(prompt, pairs, opts = {}) {
+          const g = guard(); if (g) return g;
+          if (prompt) await t.say(prompt, { pause: 120 });
+          setPrompt(prompt, opts.hints);
+          const wrap = append(el('div', 'match reveal'));
+          const leftCol = el('div', 'match-col');
+          const rightCol = el('div', 'match-col');
+          wrap.append(leftCol, rightCol);
+          const rightOrder = opts.rightOrder || pairs.map((_, i) => i).slice().reverse();
+          let sel = null, done = 0;
+          const lefts = pairs.map((p, i) => {
+            const b = el('button', 'match-card', md(p.term));
+            b.addEventListener('click', () => {
+              if (run.cancelled || b.disabled) return;
+              if (sel) sel.classList.remove('sel');
+              sel = b; b.classList.add('sel');
+              rightCol.querySelectorAll('button:not(:disabled)').forEach((r) => r.classList.add('armed'));
+            });
+            b.dataset.i = i;
+            leftCol.appendChild(b);
+            return b;
+          });
+          rightOrder.forEach((i) => {
+            const p = pairs[i];
+            const b = el('button', 'match-card', md(p.did));
+            b.addEventListener('click', () => {
+              if (run.cancelled || b.disabled || !sel) return;
+              const li = Number(sel.dataset.i);
+              if (li !== i) {
+                b.classList.add('shake');
+                setTimeout(() => b.classList.remove('shake'), 320);
+                const fb = opts.feedback ? opts.feedback(pairs[li].term, p.did) : null;
+                t.wrong(fb || `「${pairs[li].term}」说的不是这件事。再看看你到底在哪一屏做过这个动作。`);
+                record({ kind: 'match', prompt, answer: pairs[li].term + ' → ' + p.did, correct: false });
+                return;
+              }
+              sel.disabled = true; sel.classList.remove('sel'); sel.classList.add('right');
+              b.disabled = true; b.classList.add('right');
+              rightCol.querySelectorAll('button').forEach((r) => r.classList.remove('armed'));
+              sel = null;
+              record({ kind: 'match', prompt, answer: p.term + ' → ' + p.did, correct: true });
+              if (p.explain) t.right(p.explain);
+              if (++done === pairs.length) { clearPrompt(); resolveAll(true); }
+            });
+            rightCol.appendChild(b);
+          });
+          let resolveAll;
+          return new Promise((r) => { resolveAll = r; });
+        },
         /* A single button the learner presses when ready. */
         async confirm(label, opts = {}) {
           const g = guard(); if (g) return g;
@@ -301,6 +438,17 @@
           });
         },
       },
+      /* Look back at what the learner answered earlier (used by the recap screen). */
+      recall(filter) {
+        return state.log.filter((e) => {
+          if (!filter) return true;
+          if (filter.screen && e.screen !== filter.screen) return false;
+          if (filter.kind && e.kind !== filter.kind) return false;
+          if (filter.promptIncludes && !(e.prompt || '').includes(filter.promptIncludes)) return false;
+          return true;
+        });
+      },
+      recallOne(filter) { const l = t.recall(filter); return l.length ? l[l.length - 1] : null; },
       done(opts = {}) {
         if (run.cancelled) return;
         state.completed.add(run.screen.id);
