@@ -33,9 +33,9 @@
   }
   .w-step { flex: 1 0 56px; min-width: 56px; max-width: 130px; position: relative; display: flex; flex-direction: column; align-items: center; justify-content: flex-end;
     background: var(--accent-soft); border: 1.5px solid var(--line); border-radius: 10px 10px 4px 4px; height: var(--h, 48px); transition: background .2s, border-color .2s; }
-  .w-step .w-step-label { position: absolute; bottom: 6px; font-size: .78rem; color: var(--muted); white-space: nowrap; }
+  .w-step .w-step-label { position: absolute; bottom: 6px; font-size: .78rem; color: var(--ink); opacity: .8; white-space: nowrap; }
   .w-step .w-tag { position: absolute; top: -14px; right: -4px; background: var(--paper); border: 1.5px solid var(--warn); color: var(--warn); font-weight: 700; font-size: .78rem; padding: 0 6px; border-radius: 6px; line-height: 1.4; }
-  .w-step .w-tag.hot { background: var(--warn); color: #fff; }
+  .w-step .w-tag.hot { background: var(--warn); color: var(--on-accent); }
   .w-step .w-person { position: absolute; bottom: 26px; width: 26px; height: 34px; }
   .w-step.visited::after { content: ""; position: absolute; top: 6px; width: 8px; height: 8px; border-radius: 50%; background: var(--accent); }
   .w-step.current { border-color: var(--accent); background: color-mix(in srgb, var(--accent) 22%, var(--paper)); }
