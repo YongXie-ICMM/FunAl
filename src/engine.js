@@ -443,7 +443,7 @@
             b.addEventListener('click', () => {
               if (run.cancelled) return;
               b.disabled = true;
-              if (opts.echo !== false) t.learnerSays(label);
+              if (opts.echo !== false) { row.remove(); t.learnerSays(label); }
               resolve(true);
             });
           });

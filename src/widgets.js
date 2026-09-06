@@ -371,18 +371,21 @@
 
     const seen = new Map();      // value -> times this question has appeared
     const listeners = [];
-    let opened = 0, dupCount = 0, computed = 0, lookups = 0;
+    let opened = 0, dupCount = 0, computed = 0, lookups = 0, cards = 0;
+    const pending = [];   // nodes the learner has not opened yet
 
     function hudRender() {
       if (!o.hud) return;
       hud.innerHTML = '';
-      const add = (label, v, cls) => { const d = el('div', cls || '', `${esc(label)} <b>${v}</b>`); hud.appendChild(d); };
-      add('展开过的问题卡：', opened);
-      if (!o.memo) add('其中重复出现：', dupCount);
+      const add = (label, v, cls) => { const d = el('div', cls || '', `${esc(label)} <b>${typeof v === 'number' ? v.toLocaleString('en-US') : v}</b>`); hud.appendChild(d); };
+      if (o.hudLabels) { o.hudLabels(add, { opened, dupCount, computed, lookups, cards }); return; }
+      add('屏幕上的问题卡：', cards);
+      if (!o.memo) add('其中是重复的：', dupCount);
       else { add('真正算过：', computed); add('直接抄账本：', lookups); }
     }
 
     function makeNode(n, depth) {
+      cards++;
       const node = el('div', 'w-node');
       const box = el('div', 'w-node-box', esc(o.label(n)));
       node.appendChild(box);
@@ -401,6 +404,7 @@
       if (times > 1 && !o.memo) { box.classList.add('dup'); dupCount++; }
       if (o.memo && known) box.classList.add('cached');
       box.classList.add('can');
+      pending.push(state);
       box.onclick = () => {
         if (state.expanded) return;
         if (o.memo && o.book && o.book.get(n) != null) {   // take it from the notebook
@@ -453,7 +457,19 @@
     const api = {
       el: root, rootState,
       on(fn) { listeners.push(fn); return api; },
-      get stats() { return { opened, dupCount, computed, lookups, distinct: seen.size }; },
+      get stats() { return { opened, dupCount, computed, lookups, cards, distinct: seen.size }; },
+      /* Open every remaining card at once, for learners who have felt enough of the tedium. */
+      expandAll(limit) {
+        let guard = limit || 4000;
+        while (guard-- > 0) {
+          const next = root.querySelector('.w-node-box.can');
+          if (!next) break;
+          next.click();
+        }
+        hudRender();
+        return api.stats;
+      },
+      get remaining() { return root.querySelectorAll('.w-node-box.can').length; },
       get value() { return rootState.value; },
       allOpened() {
         const walk = (s) => (s.kids ? s.kids.every(walk) : true) && (s.value != null);

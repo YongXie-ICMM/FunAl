@@ -151,6 +151,13 @@ def main():
         check(f"没记性地拆到第 {n} 级：点开次数", v["clicks"], naive_clicks(n))
     for n_s, v in w["memoComputes"].items():
         check(f"有账本时真正算过的次数（第 {n_s} 级）", v, int(n_s) - 1)
+    # the identity the slider relies on, checked across the whole table
+    check("卡片张数 = 2 × 走法数 − 1（整张表）",
+          [naive_cards(i) for i in range(len(w["table"]))],
+          [2 * v - 1 for v in w["table"]])
+    check("点开次数 = 走法数 − 1（整张表）",
+          [naive_clicks(i) for i in range(len(w["table"]))],
+          [v - 1 for v in w["table"]])
 
     print("\n2. 过路费楼梯")
     t = d["toll"]
